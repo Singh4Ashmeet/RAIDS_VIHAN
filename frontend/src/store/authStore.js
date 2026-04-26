@@ -30,8 +30,9 @@ const useAuthStore = create((set, get) => ({
   login: async (username, password) => {
     set({ isLoading: true, error: null })
     try {
+      const normalizedUsername = username.trim()
       const formData = new FormData()
-      formData.append('username', username)
+      formData.append('username', normalizedUsername)
       formData.append('password', password)
 
       const res = await axios.post(`${AUTH_API_ROOT}/auth/login`, formData)
@@ -39,12 +40,12 @@ const useAuthStore = create((set, get) => ({
 
       localStorage.setItem('raid_token', token)
       localStorage.setItem('raid_role',  role)
-      localStorage.setItem('raid_username', username)
+      localStorage.setItem('raid_username', normalizedUsername)
       set({
         token,
         role,
-        username,
-        user: { username, role },
+        username: normalizedUsername,
+        user: { username: normalizedUsername, role },
         isAuthenticated: true,
         hasHydrated: true,
         isLoading: false,

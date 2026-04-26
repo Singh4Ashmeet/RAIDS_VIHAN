@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
 
 export default function Input({
-  label, error, icon: Icon, className, ...rest
+  label, error, icon: Icon, rightElement, className, ...rest
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -24,11 +24,17 @@ export default function Input({
             'focus:outline-none focus:ring-2 focus:ring-brand-500',
             'focus:border-transparent transition-all',
             Icon && 'pl-10',
+            rightElement && 'pr-11',
             error && 'border-red-500 focus:ring-red-500',
             className
           )}
           {...rest}
         />
+        {rightElement && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            {rightElement}
+          </div>
+        )}
       </div>
       {error && (
         <p className="text-xs text-red-400">{error}</p>

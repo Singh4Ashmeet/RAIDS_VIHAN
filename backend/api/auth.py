@@ -78,7 +78,8 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     """Authenticate a user and issue a bearer token."""
 
     _ = request
-    user = await fetch_one("users", form_data.username, id_field="username")
+    username = form_data.username.strip()
+    user = await fetch_one("users", username, id_field="username")
     if user is None or not verify_password(form_data.password, str(user["hashed_password"])):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -332,44 +332,81 @@ async def initialize_database() -> None:
         await connection.execute(
             "UPDATE dispatch_plans SET status = 'active' WHERE status IN ('success', 'dispatched')"
         )
-        cursor = await connection.execute("SELECT COUNT(*) AS total FROM users")
-        users_count = int((await cursor.fetchone())["total"])
-        if users_count == 0:
-            created_at = isoformat_utc()
-            await connection.executemany(
-                """
-                INSERT INTO users (
-                    id,
-                    username,
-                    hashed_password,
-                    role,
-                    full_name,
-                    is_active,
-                    created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        str(uuid4()),
-                        ADMIN_USERNAME,
-                        _PWD_CONTEXT.hash(ADMIN_PASSWORD),
-                        "admin",
-                        "Admin",
-                        1,
-                        created_at,
-                    ),
-                    (
-                        str(uuid4()),
-                        USER_USERNAME,
-                        _PWD_CONTEXT.hash(USER_PASSWORD),
-                        "user",
-                        "User",
-                        1,
-                        created_at,
-                    ),
-                ],
+        created_at = isoformat_utc()
+        default_users = [
+            {
+                "username": ADMIN_USERNAME,
+                "password": ADMIN_PASSWORD,
+                "role": "admin",
+                "full_name": "Admin",
+            },
+            {
+                "username": USER_USERNAME,
+                "password": USER_PASSWORD,
+                "role": "user",
+                "full_name": "User",
+            },
+        ]
+        for default_user in default_users:
+            cursor = await connection.execute(
+                "SELECT id, hashed_password, role, full_name, is_active FROM users WHERE username = ?",
+                (default_user["username"],),
             )
+            existing_user = await cursor.fetchone()
+            if existing_user is None:
+                hashed_password = _PWD_CONTEXT.hash(default_user["password"])
+                await connection.execute(
+                    """
+                    INSERT INTO users (
+                        id,
+                        username,
+                        hashed_password,
+                        role,
+                        full_name,
+                        is_active,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid4()),
+                        default_user["username"],
+                        hashed_password,
+                        default_user["role"],
+                        default_user["full_name"],
+                        1,
+                        created_at,
+                    ),
+                )
+                continue
+
+            password_matches = _PWD_CONTEXT.verify(
+                default_user["password"],
+                str(existing_user["hashed_password"]),
+            )
+            if (
+                not password_matches
+                or str(existing_user["role"]) != default_user["role"]
+                or str(existing_user["full_name"] or "") != default_user["full_name"]
+                or int(existing_user["is_active"]) != 1
+            ):
+                hashed_password = _PWD_CONTEXT.hash(default_user["password"])
+                await connection.execute(
+                    """
+                    UPDATE users
+                    SET hashed_password = ?,
+                        role = ?,
+                        full_name = ?,
+                        is_active = 1
+                    WHERE username = ?
+                    """,
+                    (
+                        hashed_password,
+                        default_user["role"],
+                        default_user["full_name"],
+                        default_user["username"],
+                    ),
+                )
         await connection.commit()
 
 
