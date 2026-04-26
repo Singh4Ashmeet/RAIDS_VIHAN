@@ -30,6 +30,7 @@ backend/venv/
 
 # Local databases and runtime artifacts
 *.db
+*.db-*
 *.sqlite
 *.sqlite3
 *.log
