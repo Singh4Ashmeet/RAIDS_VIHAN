@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: raid-nexus
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    disk:
+      name: raid-nexus-cache
+      mountPath: /opt/render/project/.cache
+      sizeGB: 10
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "480"
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: USER_USERNAME
+        value: user
+      - key: USER_PASSWORD
+        sync: false
+      - key: HF_HOME
+        value: /opt/render/project/.cache/huggingface
+      - key: TRANSFORMERS_CACHE
+        value: /opt/render/project/.cache/huggingface
+      - key: PYTHONUNBUFFERED
+        value: "1"
