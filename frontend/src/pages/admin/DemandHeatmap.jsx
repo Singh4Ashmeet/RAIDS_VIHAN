@@ -58,22 +58,22 @@ function HeatmapCanvas({ hotspots, selectedHotspot, onSelectHotspot }) {
   }, [hotspots])
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-border bg-slate-950/40 p-4 shadow-inner shadow-black/30">
+    <div className="relative mx-auto w-full max-w-[980px] overflow-hidden rounded-xl border border-border bg-slate-950/40 p-3 shadow-inner shadow-black/30 sm:p-4">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:8%_8%]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_20%,rgba(56,189,248,0.14),transparent_34%),radial-gradient(circle_at_80%_78%,rgba(16,185,129,0.1),transparent_28%)]" />
 
-      <div className="relative mb-3 grid grid-cols-[48px_minmax(0,1fr)_48px] items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+      <div className="relative mb-3 grid grid-cols-[32px_minmax(0,1fr)_32px] items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-500 sm:grid-cols-[48px_minmax(0,1fr)_48px]">
         <span />
         <span className="text-center">North</span>
         <span />
       </div>
 
-      <div className="relative grid grid-cols-[48px_minmax(0,1fr)_48px] items-center gap-2">
+      <div className="relative grid grid-cols-[32px_minmax(0,1fr)_32px] items-center gap-2 sm:grid-cols-[48px_minmax(0,1fr)_48px]">
         <div className="origin-center -rotate-90 text-center text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
           West
         </div>
         <div
-          className="grid aspect-[4/3] min-h-[280px] gap-0.5 rounded-lg border border-slate-700/70 bg-slate-950/50 p-1"
+          className="mx-auto grid aspect-square w-full max-w-[640px] gap-0.5 rounded-lg border border-slate-700/70 bg-slate-950/50 p-1"
           style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))` }}
         >
           {cells.map((cell) => {
@@ -107,13 +107,13 @@ function HeatmapCanvas({ hotspots, selectedHotspot, onSelectHotspot }) {
         </div>
       </div>
 
-      <div className="relative mt-3 grid grid-cols-[48px_minmax(0,1fr)_48px] items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+      <div className="relative mt-3 grid grid-cols-[32px_minmax(0,1fr)_32px] items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-500 sm:grid-cols-[48px_minmax(0,1fr)_48px]">
         <span />
         <span className="text-center">South</span>
         <span />
       </div>
 
-      <div className="relative mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="relative mt-4 grid gap-3 lg:grid-cols-3">
         {DEMAND_BANDS.map((band) => (
           <div key={band.label} className="rounded-lg border border-slate-700/70 bg-slate-900/70 p-3">
             <div className="flex items-center gap-2">

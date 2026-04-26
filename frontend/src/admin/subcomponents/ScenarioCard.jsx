@@ -56,6 +56,28 @@ function formatDurationText(status, ttlSeconds, progress) {
   return `${ttlSeconds} s duration`
 }
 
+function formatScenarioError(error) {
+  const value = error?.message ?? error
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => formatScenarioError(item))
+      .filter(Boolean)
+      .join('; ') || 'Scenario request failed'
+  }
+  if (value && typeof value === 'object') {
+    if (typeof value.detail === 'string') return value.detail
+    if (typeof value.message === 'string') return value.message
+    if (typeof value.msg === 'string') return value.msg
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return 'Scenario request failed'
+    }
+  }
+  return 'Scenario request failed'
+}
+
 export default function ScenarioCard({
   type,
   title,
@@ -167,7 +189,7 @@ export default function ScenarioCard({
         resetToIdle()
       }, 8000)
     } catch (error) {
-      const nextErrorMessage = error?.message || 'Scenario failed - check backend logs'
+      const nextErrorMessage = formatScenarioError(error) || 'Scenario failed - check backend logs'
 
       clearCountdown()
       setStatus('error')

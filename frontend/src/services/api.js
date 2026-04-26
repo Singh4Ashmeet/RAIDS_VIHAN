@@ -12,6 +12,30 @@ export const WS_ROOT = rawApiBase
 
 const api = axios.create({ baseURL: API_ROOT })
 
+function formatApiError(value, fallback = 'Request failed') {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => formatApiError(item, ''))
+      .filter(Boolean)
+      .join('; ') || fallback
+  }
+  if (value && typeof value === 'object') {
+    if (typeof value.detail === 'string') return value.detail
+    if (typeof value.message === 'string') return value.message
+    if (typeof value.msg === 'string') {
+      const location = Array.isArray(value.loc) ? value.loc.join('.') : ''
+      return location ? `${location}: ${value.msg}` : value.msg
+    }
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token || localStorage.getItem('raid_token')
   if (token) {
@@ -61,7 +85,7 @@ async function request(path, options = {}) {
 
     try {
       const errorBody = await response.json()
-      message = errorBody?.detail || errorBody?.message || message
+      message = formatApiError(errorBody?.detail ?? errorBody?.message ?? errorBody, message)
     } catch {
       const text = await response.text()
       if (text) {

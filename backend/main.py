@@ -436,11 +436,10 @@ async def lifespan(app: FastAPI):
         logger.info("Hindi translation model preloading in background...")
         asyncio.create_task(_preload_hindi_translation_model())
     app.state.density_grid = await asyncio.to_thread(build_density_grid)
+    app.state.simulation_engine = SimulationEngine()
     if DISABLE_SIMULATION:
-        app.state.simulation_engine = None
-        logger.info("Background simulation disabled by RAID_DISABLE_SIMULATION.")
+        logger.info("Background simulation loop disabled by RAID_DISABLE_SIMULATION.")
     else:
-        app.state.simulation_engine = SimulationEngine()
         await app.state.simulation_engine.start()
     try:
         yield
