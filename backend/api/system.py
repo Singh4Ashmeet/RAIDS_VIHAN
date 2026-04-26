@@ -3,7 +3,7 @@
 from __future__ import annotations
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Body, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -30,9 +30,9 @@ class ScenarioRequest(BaseModel):
 @router.post("/simulate/scenario", response_model=None)
 @limiter.limit("2/minute")
 async def trigger_scenario(
-    payload: ScenarioRequest,
     request: Request,
     response: Response,
+    payload: ScenarioRequest = Body(...),
 ) -> dict[str, object] | JSONResponse:
     """Apply a live scenario mutation for demos and smoke checks."""
 
