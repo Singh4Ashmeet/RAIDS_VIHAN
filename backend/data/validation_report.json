@@ -1,0 +1,422 @@
+{
+  "generated_at": "2026-04-25T20:14:45.759509+05:30",
+  "source_metadata": {
+    "generated_at": "2026-04-25T20:14:41.798384+05:30",
+    "random_seed": 42,
+    "generator_version": "1.1",
+    "total_incidents": 500,
+    "calibration_sources": [
+      "WHO Global Health Estimates 2023",
+      "MoRTH Road Accidents in India 2022",
+      "Census of India 2011 (projected)",
+      "Mahajan et al. (2021) Emergency Medicine Journal",
+      "Farooqui et al. (2019) JETS"
+    ]
+  },
+  "total_incidents": 500,
+  "distributions": {
+    "incident_type": {
+      "title": "Incident Type Distribution",
+      "total": 500,
+      "rows": [
+        {
+          "bucket": "cardiac",
+          "target_pct": 19.04,
+          "actual_pct": 19.8,
+          "delta_pct_points": 0.76,
+          "relative_deviation_pct": 4.0,
+          "status": "PASS"
+        },
+        {
+          "bucket": "trauma",
+          "target_pct": 18.56,
+          "actual_pct": 16.8,
+          "delta_pct_points": -1.76,
+          "relative_deviation_pct": 9.49,
+          "status": "WARN"
+        },
+        {
+          "bucket": "accident",
+          "target_pct": 23.27,
+          "actual_pct": 20.8,
+          "delta_pct_points": -2.47,
+          "relative_deviation_pct": 10.6,
+          "status": "WARN"
+        },
+        {
+          "bucket": "respiratory",
+          "target_pct": 14.68,
+          "actual_pct": 15.6,
+          "delta_pct_points": 0.92,
+          "relative_deviation_pct": 6.3,
+          "status": "WARN"
+        },
+        {
+          "bucket": "stroke",
+          "target_pct": 14.68,
+          "actual_pct": 16.0,
+          "delta_pct_points": 1.32,
+          "relative_deviation_pct": 9.03,
+          "status": "WARN"
+        },
+        {
+          "bucket": "other",
+          "target_pct": 9.78,
+          "actual_pct": 11.0,
+          "delta_pct_points": 1.22,
+          "relative_deviation_pct": 12.43,
+          "status": "WARN"
+        }
+      ],
+      "status": "WARN",
+      "warning": true
+    },
+    "city": {
+      "title": "City Distribution",
+      "total": 500,
+      "rows": [
+        {
+          "bucket": "Delhi",
+          "target_pct": 22.0,
+          "actual_pct": 22.0,
+          "delta_pct_points": 0.0,
+          "relative_deviation_pct": 0.0,
+          "status": "PASS"
+        },
+        {
+          "bucket": "Mumbai",
+          "target_pct": 22.0,
+          "actual_pct": 22.0,
+          "delta_pct_points": 0.0,
+          "relative_deviation_pct": 0.0,
+          "status": "PASS"
+        },
+        {
+          "bucket": "Bengaluru",
+          "target_pct": 18.0,
+          "actual_pct": 18.0,
+          "delta_pct_points": 0.0,
+          "relative_deviation_pct": 0.0,
+          "status": "PASS"
+        },
+        {
+          "bucket": "Chennai",
+          "target_pct": 18.0,
+          "actual_pct": 18.0,
+          "delta_pct_points": 0.0,
+          "relative_deviation_pct": 0.0,
+          "status": "PASS"
+        },
+        {
+          "bucket": "Hyderabad",
+          "target_pct": 20.0,
+          "actual_pct": 20.0,
+          "delta_pct_points": 0.0,
+          "relative_deviation_pct": 0.0,
+          "status": "PASS"
+        }
+      ],
+      "status": "PASS",
+      "warning": false
+    },
+    "time_of_day": {
+      "title": "Time-of-Day Distribution",
+      "total": 500,
+      "rows": [
+        {
+          "bucket": "00:00-05:59",
+          "target_pct": 6.41,
+          "actual_pct": 6.4,
+          "delta_pct_points": -0.01,
+          "relative_deviation_pct": 0.16,
+          "status": "PASS"
+        },
+        {
+          "bucket": "06:00-08:59",
+          "target_pct": 10.26,
+          "actual_pct": 12.4,
+          "delta_pct_points": 2.14,
+          "relative_deviation_pct": 20.9,
+          "status": "WARN"
+        },
+        {
+          "bucket": "09:00-11:59",
+          "target_pct": 17.95,
+          "actual_pct": 17.6,
+          "delta_pct_points": -0.35,
+          "relative_deviation_pct": 1.94,
+          "status": "PASS"
+        },
+        {
+          "bucket": "12:00-14:59",
+          "target_pct": 14.1,
+          "actual_pct": 13.4,
+          "delta_pct_points": -0.7,
+          "relative_deviation_pct": 4.98,
+          "status": "PASS"
+        },
+        {
+          "bucket": "15:00-17:59",
+          "target_pct": 15.38,
+          "actual_pct": 16.4,
+          "delta_pct_points": 1.02,
+          "relative_deviation_pct": 6.6,
+          "status": "WARN"
+        },
+        {
+          "bucket": "18:00-20:59",
+          "target_pct": 23.08,
+          "actual_pct": 22.0,
+          "delta_pct_points": -1.08,
+          "relative_deviation_pct": 4.67,
+          "status": "PASS"
+        },
+        {
+          "bucket": "21:00-23:59",
+          "target_pct": 12.82,
+          "actual_pct": 11.8,
+          "delta_pct_points": -1.02,
+          "relative_deviation_pct": 7.96,
+          "status": "WARN"
+        }
+      ],
+      "status": "WARN",
+      "warning": true
+    },
+    "severity": {
+      "title": "Severity Distribution",
+      "total": 500,
+      "rows": [
+        {
+          "bucket": "critical",
+          "target_pct": 25.17,
+          "actual_pct": 25.2,
+          "delta_pct_points": 0.03,
+          "relative_deviation_pct": 0.1,
+          "status": "PASS"
+        },
+        {
+          "bucket": "high",
+          "target_pct": 34.83,
+          "actual_pct": 34.6,
+          "delta_pct_points": -0.23,
+          "relative_deviation_pct": 0.66,
+          "status": "PASS"
+        },
+        {
+          "bucket": "medium",
+          "target_pct": 33.15,
+          "actual_pct": 33.0,
+          "delta_pct_points": -0.15,
+          "relative_deviation_pct": 0.44,
+          "status": "PASS"
+        },
+        {
+          "bucket": "low",
+          "target_pct": 6.85,
+          "actual_pct": 7.2,
+          "delta_pct_points": 0.35,
+          "relative_deviation_pct": 5.13,
+          "status": "WARN"
+        }
+      ],
+      "status": "WARN",
+      "warning": true
+    },
+    "severity_by_type": {
+      "cardiac": {
+        "title": "Severity Distribution \u2014 cardiac",
+        "total": 99,
+        "rows": [
+          {
+            "bucket": "critical",
+            "target_pct": 40.0,
+            "actual_pct": 44.44,
+            "delta_pct_points": 4.44,
+            "relative_deviation_pct": 11.11,
+            "status": "WARN"
+          },
+          {
+            "bucket": "high",
+            "target_pct": 35.0,
+            "actual_pct": 34.34,
+            "delta_pct_points": -0.66,
+            "relative_deviation_pct": 1.88,
+            "status": "PASS"
+          },
+          {
+            "bucket": "medium",
+            "target_pct": 25.0,
+            "actual_pct": 21.21,
+            "delta_pct_points": -3.79,
+            "relative_deviation_pct": 15.15,
+            "status": "WARN"
+          }
+        ],
+        "status": "WARN",
+        "warning": true
+      },
+      "trauma": {
+        "title": "Severity Distribution \u2014 trauma",
+        "total": 84,
+        "rows": [
+          {
+            "bucket": "critical",
+            "target_pct": 30.0,
+            "actual_pct": 27.38,
+            "delta_pct_points": -2.62,
+            "relative_deviation_pct": 8.73,
+            "status": "WARN"
+          },
+          {
+            "bucket": "high",
+            "target_pct": 40.0,
+            "actual_pct": 40.48,
+            "delta_pct_points": 0.48,
+            "relative_deviation_pct": 1.19,
+            "status": "PASS"
+          },
+          {
+            "bucket": "medium",
+            "target_pct": 30.0,
+            "actual_pct": 32.14,
+            "delta_pct_points": 2.14,
+            "relative_deviation_pct": 7.14,
+            "status": "WARN"
+          }
+        ],
+        "status": "WARN",
+        "warning": true
+      },
+      "accident": {
+        "title": "Severity Distribution \u2014 accident",
+        "total": 104,
+        "rows": [
+          {
+            "bucket": "critical",
+            "target_pct": 20.0,
+            "actual_pct": 18.27,
+            "delta_pct_points": -1.73,
+            "relative_deviation_pct": 8.65,
+            "status": "WARN"
+          },
+          {
+            "bucket": "high",
+            "target_pct": 45.0,
+            "actual_pct": 49.04,
+            "delta_pct_points": 4.04,
+            "relative_deviation_pct": 8.97,
+            "status": "WARN"
+          },
+          {
+            "bucket": "medium",
+            "target_pct": 35.0,
+            "actual_pct": 32.69,
+            "delta_pct_points": -2.31,
+            "relative_deviation_pct": 6.59,
+            "status": "WARN"
+          }
+        ],
+        "status": "WARN",
+        "warning": true
+      },
+      "respiratory": {
+        "title": "Severity Distribution \u2014 respiratory",
+        "total": 78,
+        "rows": [
+          {
+            "bucket": "high",
+            "target_pct": 30.0,
+            "actual_pct": 24.36,
+            "delta_pct_points": -5.64,
+            "relative_deviation_pct": 18.8,
+            "status": "WARN"
+          },
+          {
+            "bucket": "medium",
+            "target_pct": 50.0,
+            "actual_pct": 56.41,
+            "delta_pct_points": 6.41,
+            "relative_deviation_pct": 12.82,
+            "status": "WARN"
+          },
+          {
+            "bucket": "low",
+            "target_pct": 20.0,
+            "actual_pct": 19.23,
+            "delta_pct_points": -0.77,
+            "relative_deviation_pct": 3.85,
+            "status": "PASS"
+          }
+        ],
+        "status": "WARN",
+        "warning": true
+      },
+      "stroke": {
+        "title": "Severity Distribution \u2014 stroke",
+        "total": 80,
+        "rows": [
+          {
+            "bucket": "critical",
+            "target_pct": 50.0,
+            "actual_pct": 50.0,
+            "delta_pct_points": 0.0,
+            "relative_deviation_pct": 0.0,
+            "status": "PASS"
+          },
+          {
+            "bucket": "high",
+            "target_pct": 40.0,
+            "actual_pct": 43.75,
+            "delta_pct_points": 3.75,
+            "relative_deviation_pct": 9.38,
+            "status": "WARN"
+          },
+          {
+            "bucket": "medium",
+            "target_pct": 10.0,
+            "actual_pct": 6.25,
+            "delta_pct_points": -3.75,
+            "relative_deviation_pct": 37.5,
+            "status": "FAIL"
+          }
+        ],
+        "status": "FAIL",
+        "warning": true
+      },
+      "other": {
+        "title": "Severity Distribution \u2014 other",
+        "total": 55,
+        "rows": [
+          {
+            "bucket": "medium",
+            "target_pct": 60.0,
+            "actual_pct": 61.82,
+            "delta_pct_points": 1.82,
+            "relative_deviation_pct": 3.03,
+            "status": "PASS"
+          },
+          {
+            "bucket": "low",
+            "target_pct": 40.0,
+            "actual_pct": 38.18,
+            "delta_pct_points": -1.82,
+            "relative_deviation_pct": 4.55,
+            "status": "PASS"
+          }
+        ],
+        "status": "PASS",
+        "warning": false
+      }
+    }
+  },
+  "patient_age": {
+    "mean": 52.46,
+    "median": 54.0,
+    "std": 15.11,
+    "target_mean": 52.3,
+    "status": "PASS",
+    "relative_deviation_pct": 0.31
+  },
+  "overall_status": "WARN"
+}

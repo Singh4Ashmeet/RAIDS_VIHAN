@@ -1,0 +1,41 @@
+id,name,city,lat,lng,total_beds,occupied_beds,specialties,er_wait_minutes,diversion_status
+HOSP-DEL-001,AIIMS Delhi,Delhi,28.5672,77.2100,2478,1860,cardiology|surgery|neurology|pulmonology|pediatrics,22,false
+HOSP-DEL-002,Safdarjung Hospital,Delhi,28.5679,77.2046,1531,1224,surgery|orthopedics|pulmonology|pediatrics,31,false
+HOSP-DEL-003,RML Hospital,Delhi,28.6327,77.2004,1531,1071,cardiology|neurology|surgery|pediatrics,18,false
+HOSP-DEL-004,GTB Hospital,Delhi,28.6853,77.3020,1500,1200,surgery|orthopedics|pulmonology,35,false
+HOSP-DEL-005,Lok Nayak Hospital,Delhi,28.6380,77.2286,2000,1800,cardiology|surgery|neurology,28,false
+HOSP-DEL-006,Sir Ganga Ram Hospital,Delhi,28.6418,77.1927,675,472,cardiology|neurology|orthopedics|pulmonology,12,false
+HOSP-DEL-007,Max Hospital Saket,Delhi,28.5244,77.2066,500,375,cardiology|surgery|neurology|oncology,15,false
+HOSP-DEL-008,Apollo Hospital Sarita Vihar,Delhi,28.5355,77.2849,710,497,cardiology|surgery|neurology|pediatrics,20,false
+HOSP-MUM-001,KEM Hospital,Mumbai,18.9973,72.8407,1800,1440,surgery|cardiology|pediatrics|pulmonology,25,false
+HOSP-MUM-002,Nair Hospital,Mumbai,18.9640,72.8195,1200,960,surgery|orthopedics|neurology,30,false
+HOSP-MUM-003,Sion Hospital,Mumbai,19.0430,72.8647,1500,1200,surgery|pediatrics|pulmonology|orthopedics,22,false
+HOSP-MUM-004,Hinduja Hospital,Mumbai,19.0622,72.8362,351,246,cardiology|neurology|surgery|oncology,10,false
+HOSP-MUM-005,Lilavati Hospital,Mumbai,19.0549,72.8267,323,258,cardiology|neurology|orthopedics,12,false
+HOSP-MUM-006,Kokilaben Hospital,Mumbai,19.1219,72.8261,750,525,cardiology|surgery|neurology|pediatrics,18,false
+HOSP-MUM-007,Breach Candy Hospital,Mumbai,18.9716,72.8073,148,118,cardiology|surgery,8,false
+HOSP-MUM-008,Cooper Hospital,Mumbai,19.1172,72.8385,1500,1200,surgery|orthopedics|pulmonology|pediatrics,35,false
+HOSP-BLR-001,Bowring Hospital,Bengaluru,12.9791,77.6075,1100,880,surgery|orthopedics|pulmonology,28,false
+HOSP-BLR-002,Victoria Hospital,Bengaluru,12.9611,77.5778,1400,1120,surgery|cardiology|pediatrics,32,false
+HOSP-BLR-003,Manipal Hospital HAL,Bengaluru,12.9552,77.6449,600,420,cardiology|neurology|surgery|oncology,14,false
+HOSP-BLR-004,Fortis Hospital Bannerghatta,Bengaluru,12.8849,77.5987,280,196,cardiology|surgery|neurology,10,false
+HOSP-BLR-005,Apollo Hospital Bannerghatta,Bengaluru,12.8900,77.5978,250,175,cardiology|neurology|pediatrics,11,false
+HOSP-BLR-006,St Philomena Hospital,Bengaluru,12.9724,77.6085,450,315,surgery|orthopedics|pulmonology,18,false
+HOSP-BLR-007,NIMHANS,Bengaluru,12.9416,77.5959,700,560,neurology|psychiatry,20,false
+HOSP-BLR-008,Narayana Health City,Bengaluru,12.8984,77.6415,1000,700,cardiology|surgery|pediatrics|oncology,16,false
+HOSP-CHN-001,Government General Hospital,Chennai,13.0830,80.2785,2650,2120,surgery|cardiology|neurology|pediatrics|pulmonology,40,false
+HOSP-CHN-002,Stanley Medical College Hospital,Chennai,13.1074,80.2876,1536,1228,surgery|orthopedics|pulmonology|pediatrics,35,false
+HOSP-CHN-003,Apollo Hospital Greams Road,Chennai,13.0644,80.2566,560,392,cardiology|neurology|surgery|oncology,12,false
+HOSP-CHN-004,Fortis Malar Hospital,Chennai,13.0067,80.2574,180,126,cardiology|surgery|orthopedics,10,false
+HOSP-CHN-005,MIOT International,Chennai,13.0121,80.1842,1000,700,cardiology|surgery|orthopedics|neurology,18,false
+HOSP-CHN-006,Vijaya Hospital,Chennai,13.0433,80.2376,300,225,surgery|pulmonology|orthopedics,15,false
+HOSP-CHN-007,Kilpauk Medical College Hospital,Chennai,13.0826,80.2496,1100,880,surgery|pediatrics|neurology|pulmonology,30,false
+HOSP-CHN-008,Sri Ramachandra Hospital,Chennai,13.0388,80.1491,850,595,cardiology|surgery|neurology|pediatrics,20,false
+HOSP-HYD-001,Osmania General Hospital,Hyderabad,17.3786,78.4763,1800,1440,surgery|cardiology|neurology|pediatrics,38,false
+HOSP-HYD-002,Niloufer Hospital,Hyderabad,17.4005,78.4770,730,584,pediatrics|pulmonology|surgery,25,false
+HOSP-HYD-003,Gandhi Hospital,Hyderabad,17.4189,78.4931,1000,800,surgery|orthopedics|pulmonology|cardiology,30,false
+HOSP-HYD-004,Apollo Hospital Jubilee Hills,Hyderabad,17.4327,78.4071,700,490,cardiology|neurology|surgery|oncology,14,false
+HOSP-HYD-005,KIMS Hospital,Hyderabad,17.4339,78.4034,1000,700,cardiology|surgery|orthopedics|neurology,12,false
+HOSP-HYD-006,Care Hospital Banjara Hills,Hyderabad,17.4182,78.4397,350,245,cardiology|surgery|neurology,11,false
+HOSP-HYD-007,Yashoda Hospital Malakpet,Hyderabad,17.3748,78.5038,550,385,surgery|orthopedics|pulmonology|cardiology,22,false
+HOSP-HYD-008,Continental Hospital,Hyderabad,17.4100,78.3400,250,175,cardiology|neurology|surgery,10,false

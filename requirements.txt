@@ -1,0 +1,50 @@
+# RAID Vihan root dependency reference
+#
+# Backend dependencies below can be installed with:
+#   pip install -r requirements.txt
+#
+# Frontend dependencies are managed by npm, not pip.
+# They are listed here as comments for one-file visibility.
+# Install them with:
+#   cd frontend
+#   npm install
+
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+aiosqlite==0.20.0
+pydantic==2.13.2
+geopy==2.4.1
+python-multipart==0.0.9
+httpx==0.27.0
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.4.2
+scipy==1.17.1
+xgboost==2.0.3
+joblib==1.5.3
+langgraph==1.1.8
+python-dotenv==1.0.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+aiofiles==23.2.1
+transformers>=4.35.0
+torch>=2.0.0
+sentencepiece>=0.1.99
+sacremoses>=0.0.53
+langdetect==1.0.9
+slowapi==0.1.9
+limits==3.6.0
+
+# Frontend npm dependencies from frontend/package.json
+# react@^19.2.0
+# react-dom@^19.2.0
+# @testing-library/jest-dom@^6.9.1
+# @testing-library/react@^16.3.2
+# @testing-library/user-event@^14.6.1
+# @vitejs/plugin-react@^6.0.1
+# @vitest/ui@^4.1.4
+# jsdom@^29.0.2
+# msw@^2.13.4
+# vite@^8.0.8
+# vitest@^4.1.4
