@@ -36,7 +36,7 @@ async def trigger_scenario(
 ) -> dict[str, object] | JSONResponse:
     """Apply a live scenario mutation for demos and smoke checks."""
 
-    engine = request.app.state.simulation_engine
+    engine = getattr(request.app.state, "simulation_engine", None)
     body: dict[str, object] = {"scenario": payload.type}
 
     if payload.type == "cardiac":
@@ -61,6 +61,11 @@ async def trigger_scenario(
             body["dispatch_status"] = dispatch_status
             body["dispatch_message"] = dispatch_message
         body["dispatch_plan"] = dispatch_plan
+    elif engine is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Background simulation is disabled for this deployment.",
+        )
     elif payload.type == "overload":
         body["overload"] = await engine.apply_hospital_overload("HOSP-005")
     elif payload.type == "breakdown":

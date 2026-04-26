@@ -68,6 +68,12 @@ LIGHTWEIGHT_TRIAGE = os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in
     "yes",
     "on",
 }
+DISABLE_SIMULATION = os.getenv("RAID_DISABLE_SIMULATION", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def _ensure_cpu_executor() -> ThreadPoolExecutor:
@@ -430,12 +436,18 @@ async def lifespan(app: FastAPI):
         logger.info("Hindi translation model preloading in background...")
         asyncio.create_task(_preload_hindi_translation_model())
     app.state.density_grid = await asyncio.to_thread(build_density_grid)
-    app.state.simulation_engine = SimulationEngine()
-    await app.state.simulation_engine.start()
+    if DISABLE_SIMULATION:
+        app.state.simulation_engine = None
+        logger.info("Background simulation disabled by RAID_DISABLE_SIMULATION.")
+    else:
+        app.state.simulation_engine = SimulationEngine()
+        await app.state.simulation_engine.start()
     try:
         yield
     finally:
-        await app.state.simulation_engine.stop()
+        simulation_engine = getattr(app.state, "simulation_engine", None)
+        if simulation_engine is not None:
+            await simulation_engine.stop()
         await close_connection()
         if not getattr(CPU_EXECUTOR, "_shutdown", False):
             CPU_EXECUTOR.shutdown(wait=True)
