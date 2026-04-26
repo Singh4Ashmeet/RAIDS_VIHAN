@@ -8,14 +8,10 @@ import os
 from threading import Lock
 from typing import Any
 
-from transformers import pipeline
-
 try:
     from services.language_detector import detect_language, get_language_review_message
-    from services.offline_translator import translate_to_english
 except ModuleNotFoundError:
     from backend.services.language_detector import detect_language, get_language_review_message
-    from backend.services.offline_translator import translate_to_english
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +103,8 @@ def _get_classifier():
         with _classifier_lock:
             if _classifier is None:
                 logger.info("Loading NLP triage model...")
+                from transformers import pipeline
+
                 _classifier = pipeline(
                     "zero-shot-classification",
                     model=MODEL_NAME,
@@ -371,6 +369,11 @@ async def triage_incident(complaint: str, city: str | None = None, sos_mode: boo
             return fallback_result
 
         if not lang_result["is_english"] and lang_result["detection_reliable"]:
+            try:
+                from services.offline_translator import translate_to_english
+            except ModuleNotFoundError:
+                from backend.services.offline_translator import translate_to_english
+
             translation = await translate_to_english(
                 complaint,
                 str(lang_result["language_code"]),

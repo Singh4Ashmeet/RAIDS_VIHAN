@@ -7,8 +7,6 @@ import logging
 import re
 from typing import Any
 
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
 logger = logging.getLogger(__name__)
 
 LANGUAGE_MODEL_MAP: dict[str, str] = {
@@ -69,6 +67,8 @@ def _load_translation_pipeline(model_name: str):
         return _translation_pipelines[model_name]
 
     logger.info("Loading translation model: %s (first use - downloading if needed)", model_name)
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
     translator = {
