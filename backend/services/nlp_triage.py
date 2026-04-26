@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from threading import Lock
 from typing import Any
 
@@ -18,6 +19,12 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger(__name__)
 
+LIGHTWEIGHT_TRIAGE = os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 MODEL_NAME = "facebook/bart-large-mnli"
 TRIAGE_VERSION = "nlp_v1"
 LOW_TYPE_CONFIDENCE = 0.55
@@ -344,6 +351,25 @@ async def triage_incident(complaint: str, city: str | None = None, sos_mode: boo
     lang_review_msg = get_language_review_message(lang_result)
 
     try:
+        if LIGHTWEIGHT_TRIAGE:
+            fallback_result = _keyword_fallback_triage(
+                complaint,
+                sos_mode,
+                triage_version="keyword_lightweight",
+                requires_human_review=not bool(lang_result.get("is_english")),
+                review_reason=(
+                    _combine_review_reasons(
+                        "Hosted lightweight triage mode is active. Manual review recommended for non-English reports.",
+                        lang_review_msg,
+                    )
+                    if not bool(lang_result.get("is_english"))
+                    else None
+                ),
+                language_detection=lang_result,
+            )
+            fallback_result["deployment_mode"] = "lightweight"
+            return fallback_result
+
         if not lang_result["is_english"] and lang_result["detection_reliable"]:
             translation = await translate_to_english(
                 complaint,

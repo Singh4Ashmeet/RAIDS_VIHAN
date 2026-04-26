@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -61,6 +62,12 @@ FRONTEND_RESERVED_PATHS = {"api", "docs", "health", "openapi.json", "redoc", "ws
 BENCHMARK_RESULTS_FILE = DATA_DIR / "benchmark_results.json"
 LITERATURE_COMPARISON_FILE = DATA_DIR / "literature_comparison.json"
 _BENCHMARK_CACHE: dict[str, object] = {}
+LIGHTWEIGHT_TRIAGE = os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def _ensure_cpu_executor() -> ThreadPoolExecutor:
@@ -400,25 +407,28 @@ async def lifespan(app: FastAPI):
         totals["hospitals"],
         totals["incidents"],
     )
-    logger.info("NLP triage model loading in background... First run may download about 1.6GB.")
-    from services.nlp_triage import _get_classifier
-    from services.offline_translator import _load_translation_pipeline
+    if LIGHTWEIGHT_TRIAGE:
+        logger.info("Hosted lightweight triage mode active; skipping Hugging Face model preloading.")
+    else:
+        logger.info("NLP triage model loading in background... First run may download about 1.6GB.")
+        from services.nlp_triage import _get_classifier
+        from services.offline_translator import _load_translation_pipeline
 
-    async def _preload_nlp_triage_model() -> None:
-        try:
-            await asyncio.to_thread(_get_classifier)
-        except Exception as exc:
-            logger.warning("NLP triage model preload failed: %s", exc)
+        async def _preload_nlp_triage_model() -> None:
+            try:
+                await asyncio.to_thread(_get_classifier)
+            except Exception as exc:
+                logger.warning("NLP triage model preload failed: %s", exc)
 
-    async def _preload_hindi_translation_model() -> None:
-        try:
-            await asyncio.to_thread(_load_translation_pipeline, "Helsinki-NLP/opus-mt-hi-en")
-        except Exception as exc:
-            logger.warning("Hindi translation model preload failed: %s", exc)
+        async def _preload_hindi_translation_model() -> None:
+            try:
+                await asyncio.to_thread(_load_translation_pipeline, "Helsinki-NLP/opus-mt-hi-en")
+            except Exception as exc:
+                logger.warning("Hindi translation model preload failed: %s", exc)
 
-    asyncio.create_task(_preload_nlp_triage_model())
-    logger.info("Hindi translation model preloading in background...")
-    asyncio.create_task(_preload_hindi_translation_model())
+        asyncio.create_task(_preload_nlp_triage_model())
+        logger.info("Hindi translation model preloading in background...")
+        asyncio.create_task(_preload_hindi_translation_model())
     app.state.density_grid = await asyncio.to_thread(build_density_grid)
     app.state.simulation_engine = SimulationEngine()
     await app.state.simulation_engine.start()

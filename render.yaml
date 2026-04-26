@@ -30,3 +30,5 @@ services:
         value: /opt/render/project/.cache/huggingface
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: RAID_LIGHTWEIGHT_TRIAGE
+        value: "1"
