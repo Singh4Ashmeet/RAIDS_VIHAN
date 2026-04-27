@@ -11,7 +11,7 @@ from typing import Final
 
 import httpx
 
-from config import KOLKATA_TZ
+from core.config import KOLKATA_TZ
 
 logger = logging.getLogger("raid.traffic")
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from database import fetch_one
+from repositories.database import fetch_one
 from models.dispatch import DispatchPlan
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])

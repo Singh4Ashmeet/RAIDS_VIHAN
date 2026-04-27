@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from config import isoformat_utc
-from database import insert_record
+from core.config import isoformat_utc
+from repositories.database import insert_record
 from services.nlp_triage import triage_incident
 
 PREP_CHECKLISTS: dict[str, list[str]] = {

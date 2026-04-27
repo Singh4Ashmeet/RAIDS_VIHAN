@@ -3,9 +3,9 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { clsx } from 'clsx'
 import { Waves } from 'lucide-react'
 
-import Badge from '../../components/ui/Badge'
-import Card from '../../components/ui/Card'
-import EmptyState from '../../components/ui/EmptyState'
+import Badge from '../ui/Badge'
+import Card from '../ui/Card'
+import EmptyState from '../ui/EmptyState'
 import useDispatchStore from '../../store/dispatchStore'
 
 const scenarioBorderMap = {

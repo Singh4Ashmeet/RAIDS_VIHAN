@@ -9,9 +9,9 @@ import {
   XCircle,
 } from 'lucide-react'
 
-import Badge from '../../components/ui/Badge'
-import Card from '../../components/ui/Card'
-import Skeleton from '../../components/ui/Skeleton'
+import Badge from '../ui/Badge'
+import Card from '../ui/Card'
+import Skeleton from '../ui/Skeleton'
 
 const SCENARIO_META = {
   cardiac: {

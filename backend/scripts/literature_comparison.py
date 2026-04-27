@@ -11,7 +11,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from config import DATA_DIR, isoformat_utc
+from core.config import DATA_DIR, isoformat_utc
 
 BENCHMARK_RESULTS_PATH: Final[Path] = DATA_DIR / "benchmark_results.json"
 CROSS_CITY_RESULTS_PATH: Final[Path] = DATA_DIR / "cross_city_results.json"

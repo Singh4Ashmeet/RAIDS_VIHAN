@@ -28,7 +28,7 @@ The startup sequence is:
 
 2. The lifespan handler initializes the event loop executor and logs that the CPU pool is ready.
 
-3. The database is initialized through `initialize_database()` in `backend/database.py`. Tables are created or migrated, boolean conversion fields are registered, and default users are seeded if the users table is empty.
+3. The database is initialized through `initialize_database()` in `backend/repositories/database.py`. Tables are created or migrated, boolean conversion fields are registered, and default users are seeded if the users table is empty. Legacy imports through `backend/database.py` remain as a compatibility shim, but new backend modules use the repository layer directly.
 
 4. Seed data is loaded through `load_seed_data()`. Hospitals and ambulances are inserted or updated from the seed files so the demo always has fleet and hospital capacity.
 
@@ -87,7 +87,7 @@ The WebSocket path also uses JWT authentication. The frontend connects with the 
 
 ## 6. Frontend Navigation
 
-The React application is organized around authenticated routes in `frontend/src/App.jsx`.
+The React application is organized around authenticated routes in `frontend/src/App.jsx`. Legacy non-routed admin and user folders have been removed; all live screens now sit under `frontend/src/pages`, reusable UI sits under `frontend/src/components`, layouts sit under `frontend/src/layouts`, API clients sit under `frontend/src/services`, and application state sits under `frontend/src/store`.
 
 | Route | Page | Purpose |
 |---|---|---|

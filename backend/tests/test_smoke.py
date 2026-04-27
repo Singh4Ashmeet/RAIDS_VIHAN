@@ -10,10 +10,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from config import get_db_path
+from core.config import get_db_path
 from main import create_app
 from ml.synthetic_generator import generate_training_data, get_output_path
-from security import limiter
+from core.security import limiter
 
 warnings.simplefilter("ignore", ResourceWarning)
 

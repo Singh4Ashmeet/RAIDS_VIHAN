@@ -3,8 +3,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { clsx } from 'clsx'
 import { Play } from 'lucide-react'
 
-import Button from '../../components/ui/Button'
-import Card from '../../components/ui/Card'
+import Button from '../ui/Button'
+import Card from '../ui/Card'
 import { triggerScenario } from '../../services/api'
 import useDispatchStore from '../../store/dispatchStore'
 

@@ -5,7 +5,7 @@ from typing import Any, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from database import fetch_all, fetch_one
+from repositories.database import fetch_all, fetch_one
 from services.geo_service import get_active_traffic_multiplier, score_route
 from services.notification_service import notify_hospital as send_hospital_alert
 from services.scoring_service import (

@@ -15,7 +15,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from config import DATA_DIR, KOLKATA_TZ
+from core.config import DATA_DIR, KOLKATA_TZ
 
 SYNTHETIC_INCIDENTS_PATH: Final[Path] = DATA_DIR / "synthetic_incidents.json"
 VALIDATION_REPORT_PATH: Final[Path] = DATA_DIR / "validation_report.json"

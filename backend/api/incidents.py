@@ -5,17 +5,17 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from database import fetch_all
+from repositories.database import fetch_all
 from models.incident import Incident, IncidentCreate
 from services.dispatch_service import full_dispatch_pipeline
 from simulation.incident_sim import build_incident_payload, create_incident
-from utils.response import fallback, success, unwrap_envelope
+from core.response import fallback, success, unwrap_envelope
 
 try:
-    from security import limiter, sanitize_text_field, validate_incident_type, validate_india_coordinates, validate_severity
+    from core.security import limiter, sanitize_text_field, validate_incident_type, validate_india_coordinates, validate_severity
     from services.anomaly_detector import analyze_incident, record_incident
 except ModuleNotFoundError:
-    from backend.security import limiter, sanitize_text_field, validate_incident_type, validate_india_coordinates, validate_severity
+    from backend.core.security import limiter, sanitize_text_field, validate_incident_type, validate_india_coordinates, validate_severity
     from backend.services.anomaly_detector import analyze_incident, record_incident
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])

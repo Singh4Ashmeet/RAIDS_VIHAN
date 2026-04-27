@@ -27,7 +27,7 @@ Incident data is synthetically generated and calibrated to published Indian EMS 
 ### Reproduce the Data
 
 ```bash
-python backend/scripts/generate_incidents.py --count 500 --seed 42
+python backend/scripts/generate_incidents.py --count 700 --seed 42
 python backend/scripts/validate_synthetic_data.py
 python backend/scripts/benchmark.py
 ```
@@ -107,25 +107,28 @@ FastAPI backend
 ```text
 GTBIT_2025_2029/
 |-- backend/
-|   |-- api/             # REST and WebSocket routes
+|   |-- api/             # Thin REST and WebSocket route handlers
 |   |-- agents/          # LangGraph-based dispatch workflow
+|   |-- core/            # Configuration, security, response helpers, dependencies
 |   |-- data/            # Seed data for ambulances, hospitals, incidents
 |   |-- ml/              # Synthetic data generation and ML utilities
-|   |-- models/          # Pydantic response and domain models
-|   |-- services/        # Dispatch, scoring, geo, triage, notifications
+|   |-- models/          # Pydantic schemas and domain models
+|   |-- repositories/    # Database adapters, schema setup, CRUD helpers
+|   |-- services/        # Business logic: dispatch, scoring, triage, audit, demand
 |   |-- simulation/      # Background simulation engine
 |   |-- tests/           # Backend smoke tests
-|   |-- config.py
-|   |-- database.py
+|   |-- config.py        # Compatibility shim; prefer core.config
+|   |-- database.py      # Compatibility shim; prefer repositories.database
 |   `-- main.py
 |-- frontend/
 |   |-- src/
-|   |   |-- admin/       # Admin-facing views
-|   |   |-- context/     # Live WebSocket state management
+|   |   |-- components/  # Reusable UI, route protection, scenario widgets
+|   |   |-- layouts/     # Authenticated admin and user shells
+|   |   |-- pages/       # Modern routed admin/user page modules
 |   |   |-- services/    # Frontend API client helpers
-|   |   |-- shared/      # Reusable UI components
+|   |   |-- store/       # Zustand auth and dispatch state
 |   |   |-- test/        # Frontend test suite
-|   |   `-- user/        # User-facing flows
+|   |   `-- App.jsx      # Route graph and auth-gated layouts
 |   |-- package.json
 |   `-- vite.config.js
 |-- start.py             # Unified launcher for backend + frontend

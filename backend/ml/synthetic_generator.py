@@ -14,7 +14,7 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from config import CITY_TO_CODE, TRAINING_DATA_PATH_ENV_VAR
+from core.config import CITY_TO_CODE, TRAINING_DATA_PATH_ENV_VAR
 
 DEFAULT_OUTPUT_PATH = Path(__file__).with_name("training_data.csv")
 

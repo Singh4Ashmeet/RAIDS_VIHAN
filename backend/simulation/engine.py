@@ -9,8 +9,8 @@ import random
 from datetime import timedelta
 from typing import Any
 
-from config import AUTO_BREAKDOWN_INTERVAL, AUTO_BREAKDOWN_TICKS, INCIDENT_GENERATION_INTERVAL, SIMULATION_TICK_SECONDS, TRAFFIC_STATE, isoformat_utc, utc_now
-from database import fetch_all, fetch_one, update_record
+from core.config import AUTO_BREAKDOWN_INTERVAL, AUTO_BREAKDOWN_TICKS, INCIDENT_GENERATION_INTERVAL, SIMULATION_TICK_SECONDS, TRAFFIC_STATE, isoformat_utc, utc_now
+from repositories.database import fetch_all, fetch_one, update_record
 from services.dispatch_service import full_dispatch_pipeline
 from simulation.ambulance_sim import advance_ambulances
 from simulation.hospital_sim import fluctuate_hospitals

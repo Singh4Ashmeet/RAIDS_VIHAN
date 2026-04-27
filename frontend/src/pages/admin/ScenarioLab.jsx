@@ -4,9 +4,9 @@ import { Activity, AlertTriangle, Pause, Play, RotateCcw, Route, Siren } from 'l
 
 import { fetchAnalytics } from '../../services/api'
 import Skeleton from '../../components/ui/Skeleton'
-import ScenarioCard from '../../admin/subcomponents/ScenarioCard'
-import ScenarioStepTrace from '../../admin/subcomponents/ScenarioStepTrace'
-import ScenarioEventLog from '../../admin/subcomponents/ScenarioEventLog'
+import ScenarioCard from '../../components/scenario/ScenarioCard'
+import ScenarioStepTrace from '../../components/scenario/ScenarioStepTrace'
+import ScenarioEventLog from '../../components/scenario/ScenarioEventLog'
 
 const SCENARIOS = [
   {

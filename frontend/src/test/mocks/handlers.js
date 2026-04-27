@@ -305,6 +305,20 @@ export const MOCK_INCIDENTS = [
 ]
 
 export const handlers = [
+  http.get('/api/auth/me', () =>
+    HttpResponse.json({
+      id: 'USR-ADMIN',
+      username: 'admin',
+      role: 'admin',
+      full_name: 'Admin',
+    })),
+  http.post('/api/auth/login', () =>
+    HttpResponse.json({
+      access_token: 'test-admin-token',
+      token_type: 'bearer',
+      role: 'admin',
+      username: 'admin',
+    })),
   http.get('/api/ambulances', () =>
     HttpResponse.json(MOCK_AMBULANCES)),
   http.get('/api/hospitals', () =>
@@ -319,6 +333,17 @@ export const handlers = [
     HttpResponse.json(MOCK_FAIRNESS)),
   http.get('/api/literature-comparison', () =>
     HttpResponse.json(MOCK_LITERATURE_COMPARISON)),
+  http.get('/api/overrides/stats', () =>
+    HttpResponse.json({
+      total_dispatches: 6,
+      total_overrides: 1,
+      override_rate_pct: 16.7,
+      overrides_by_reason: { local_knowledge: 1 },
+      avg_eta_ai: 6.4,
+      avg_eta_override: 5.9,
+      eta_change_on_override: -0.5,
+      most_common_override_reason: 'local_knowledge',
+    })),
   http.get('/api/patients/:id', () =>
     HttpResponse.json(MOCK_PATIENT)),
   http.get('/api/dispatch/:id', () =>

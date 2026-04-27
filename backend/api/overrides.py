@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from api.auth import get_current_admin
-from config import isoformat_utc, utc_now
-from database import fetch_all, fetch_one, get_connection, insert_record, update_record
+from core.config import isoformat_utc, utc_now
+from repositories.database import fetch_all, fetch_one, get_connection, insert_record, update_record
 from services.audit_service import get_audit_trail, get_override_stats, log_human_override
 from services.routing import get_travel_time
 

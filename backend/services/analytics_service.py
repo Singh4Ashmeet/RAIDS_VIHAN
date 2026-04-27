@@ -6,8 +6,8 @@ from datetime import datetime
 from statistics import mean
 from typing import Any
 
-from config import KOLKATA_TZ
-from database import fetch_all
+from core.config import KOLKATA_TZ
+from repositories.database import fetch_all
 
 
 def _is_today_local(timestamp: str) -> bool:

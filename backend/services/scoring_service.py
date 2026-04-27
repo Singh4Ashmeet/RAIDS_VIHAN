@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 from uuid import uuid4
 
-from config import ANALYTICS_OVERLOAD_THRESHOLD, INCIDENT_EQUIPMENT_REQUIREMENTS, INCIDENT_SPECIALTY_REQUIREMENTS, isoformat_utc
+from core.config import ANALYTICS_OVERLOAD_THRESHOLD, INCIDENT_EQUIPMENT_REQUIREMENTS, INCIDENT_SPECIALTY_REQUIREMENTS, isoformat_utc
 from services.geo_service import get_active_traffic_multiplier, score_route
 
 

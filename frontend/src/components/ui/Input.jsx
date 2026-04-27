@@ -1,12 +1,16 @@
 import { clsx } from 'clsx'
+import { useId } from 'react'
 
 export default function Input({
   label, error, icon: Icon, rightElement, className, ...rest
 }) {
+  const generatedId = useId()
+  const inputId = rest.id || generatedId
+
   return (
     <div className="flex flex-col gap-1.5">
       {label && (
-        <label className="text-sm font-medium text-slate-300">
+        <label htmlFor={inputId} className="text-sm font-medium text-slate-300">
           {label}
         </label>
       )}
@@ -18,6 +22,7 @@ export default function Input({
           </div>
         )}
         <input
+          id={inputId}
           className={clsx(
             'w-full bg-slate-800 border border-border rounded-xl',
             'px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500',

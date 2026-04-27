@@ -1,55 +1,102 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MockWebSocket } from './mocks/websocket'
+
 import App from '../App'
+import useAuthStore from '../store/authStore'
+import useDispatchStore from '../store/dispatchStore'
+import { MockWebSocket } from './mocks/websocket'
 
-describe('App scaffold', () => {
-  beforeEach(() => { vi.stubGlobal('WebSocket', MockWebSocket) })
-  afterEach(() => { vi.unstubAllGlobals() })
+function resetAuth(role = null) {
+  localStorage.clear()
+  useAuthStore.setState({
+    user: role ? { username: role, role } : null,
+    token: role ? `${role}-token` : null,
+    role,
+    username: role,
+    isAuthenticated: Boolean(role),
+    hasHydrated: Boolean(role),
+    isLoading: false,
+    error: null,
+  })
+  if (role) {
+    localStorage.setItem('raid_token', `${role}-token`)
+    localStorage.setItem('raid_role', role)
+    localStorage.setItem('raid_username', role)
+  }
+}
 
-  it('renders role selector with Admin and User buttons', () => {
-    render(<App />)
-    expect(screen.getByRole('button', { name: /admin/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /user/i })).toBeInTheDocument()
+function resetDispatch() {
+  useDispatchStore.setState({
+    incidents: [],
+    ambulances: [],
+    hospitals: [],
+    lastDispatch: null,
+    dispatchHistory: [],
+    notifications: [],
+    anomalyAlerts: [],
+    wsStatus: 'disconnected',
+    systemStatus: 'normal',
+    trafficMultiplier: 1,
+    _ws: null,
+  })
+}
+
+describe('App routed structure', () => {
+  beforeEach(() => {
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    window.history.pushState({}, '', '/')
+    resetAuth()
+    resetDispatch()
   })
 
-  it('shows admin tabs by default when Admin is selected', async () => {
-    render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /admin/i }))
-    expect(screen.getByText(/command center/i)).toBeInTheDocument()
-    expect(screen.getByText(/fleet/i)).toBeInTheDocument()
-    expect(screen.getByText(/analytics/i)).toBeInTheDocument()
-    expect(screen.getByText(/scenario/i)).toBeInTheDocument()
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    resetAuth()
+    resetDispatch()
   })
 
-  it('shows user tabs when User is selected', async () => {
+  it('renders the landing route without the legacy role-switcher shell', async () => {
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /user/i }))
-    expect(screen.getByText(/emergency sos/i)).toBeInTheDocument()
-    expect(screen.getByText(/my status/i)).toBeInTheDocument()
-    expect(screen.getByText(/hospital finder/i)).toBeInTheDocument()
+
+    expect(await screen.findByText('RAID Nexus')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/role selector/i)).not.toBeInTheDocument()
   })
 
-  it('switches portal content when role is toggled', async () => {
+  it('renders the login route and password visibility control', async () => {
+    window.history.pushState({}, '', '/login')
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /user/i }))
-    expect(screen.getByText(/emergency sos/i)).toBeInTheDocument()
-    expect(screen.queryByText(/fleet/i)).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /admin/i }))
-    expect(screen.getByText(/fleet/i)).toBeInTheDocument()
-    expect(screen.queryByText(/emergency sos/i)).not.toBeInTheDocument()
+
+    expect(await screen.findByLabelText('Username', { selector: 'input' })).toBeInTheDocument()
+    const passwordInput = screen.getByLabelText('Password', { selector: 'input' })
+    expect(passwordInput).toHaveAttribute('type', 'password')
+
+    await userEvent.click(screen.getByRole('button', { name: /show password/i }))
+    expect(passwordInput).toHaveAttribute('type', 'text')
   })
 
-  it('displays connection status indicator', async () => {
+  it('renders the modern admin route for authenticated admins', async () => {
+    resetAuth('admin')
+    window.history.pushState({}, '', '/admin/command')
+
     render(<App />)
-    expect(screen.getByText(/live|reconnecting/i)).toBeInTheDocument()
+
+    expect(await screen.findByRole('heading', { name: /command center/i })).toBeInTheDocument()
+    expect(screen.getByText(/fleet & hospitals/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(MockWebSocket.instance?.url).toMatch('/ws/live')
+    })
   })
 
-  it('contains no emoji characters in rendered output', () => {
+  it('renders the modern user SOS route for authenticated users', async () => {
+    resetAuth('user')
+    window.history.pushState({}, '', '/user/sos')
+
     render(<App />)
-    const text = document.body.textContent || ''
-    const emojiRegex = /[\u{1F300}-\u{1FFFF}]/u
-    expect(emojiRegex.test(text)).toBe(false)
+
+    expect(await screen.findByRole('heading', { name: /emergency sos/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/full name/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /voice report/i })).toBeInTheDocument()
   })
 })

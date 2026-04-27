@@ -6,20 +6,20 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from config import isoformat_utc
-from database import fetch_one, insert_record
+from core.config import isoformat_utc
+from repositories.database import fetch_one, insert_record
 from models.patient import Patient, PatientCreate, PatientDetailResponse
 from services.dispatch_service import full_dispatch_pipeline
 from services.geo_service import nearest_city
 from services.nlp_triage import triage_incident
 from simulation.incident_sim import build_incident_payload, create_incident
-from utils.response import error, fallback, success, unwrap_envelope
+from core.response import error, fallback, success, unwrap_envelope
 
 try:
-    from security import sanitize_text_field, validate_india_coordinates
+    from core.security import sanitize_text_field, validate_india_coordinates
     from services.anomaly_detector import analyze_incident, record_incident
 except ModuleNotFoundError:
-    from backend.security import sanitize_text_field, validate_india_coordinates
+    from backend.core.security import sanitize_text_field, validate_india_coordinates
     from backend.services.anomaly_detector import analyze_incident, record_incident
 
 router = APIRouter(prefix="/patients", tags=["patients"])

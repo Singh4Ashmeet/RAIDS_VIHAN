@@ -17,7 +17,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 import database
-from config import CITY_AMBULANCE_BASE_SPEED_KMH, CITY_CENTERS
+from core.config import CITY_AMBULANCE_BASE_SPEED_KMH, CITY_CENTERS
 
 HOSPITALS_CSV_PATH = BACKEND_DIR / "data" / "hospitals.csv"
 AMBULANCES_CSV_PATH = BACKEND_DIR / "data" / "ambulances.csv"

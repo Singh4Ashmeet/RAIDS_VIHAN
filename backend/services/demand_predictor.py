@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any, Final
 
 try:
-    from config import DATA_DIR, KOLKATA_TZ
+    from core.config import DATA_DIR, KOLKATA_TZ
 except ModuleNotFoundError:
-    from backend.config import DATA_DIR, KOLKATA_TZ
+    from backend.core.config import DATA_DIR, KOLKATA_TZ
 
 GRID_SIZE: Final[int] = 20
 HOTSPOT_THRESHOLD: Final[float] = 0.15

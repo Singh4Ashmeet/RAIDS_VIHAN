@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import random
 
-from config import ER_WAIT_MAX, ER_WAIT_MIN, HOSPITAL_OCCUPANCY_MAX, HOSPITAL_OCCUPANCY_MIN
-from database import fetch_all, update_record
+from core.config import ER_WAIT_MAX, ER_WAIT_MIN, HOSPITAL_OCCUPANCY_MAX, HOSPITAL_OCCUPANCY_MIN
+from repositories.database import fetch_all, update_record
 
 
 async def fluctuate_hospitals(random_source: random.Random) -> None:

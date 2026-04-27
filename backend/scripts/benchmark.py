@@ -25,7 +25,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from config import CITY_AMBULANCE_BASE_SPEED_KMH, DATA_DIR, isoformat_utc
+from core.config import CITY_AMBULANCE_BASE_SPEED_KMH, DATA_DIR, isoformat_utc
 from services.demand_predictor import build_density_grid
 from services.dispatch import select_dispatch
 from services.fairness import compare_fairness, compute_fairness_metrics

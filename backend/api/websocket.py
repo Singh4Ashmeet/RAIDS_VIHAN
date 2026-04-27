@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from database import fetch_all
+from repositories.database import fetch_all
 from services.geo_service import get_active_traffic_multiplier
 
 try:

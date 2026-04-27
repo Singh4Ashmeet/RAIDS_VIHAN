@@ -6,8 +6,8 @@ from datetime import timedelta
 from typing import Any
 from uuid import uuid4
 
-from config import isoformat_utc, utc_now
-from database import fetch_all, fetch_one, insert_record
+from core.config import isoformat_utc, utc_now
+from repositories.database import fetch_all, fetch_one, insert_record
 
 
 def _incident_context(incident: dict[str, Any] | None) -> dict[str, Any]:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from config import AMBULANCE_STEP_MAX, AMBULANCE_STEP_MIN, HOSPITAL_HOLD_TICKS, SCENE_HOLD_TICKS, utc_now
-from database import fetch_all, fetch_one, update_record
+from core.config import AMBULANCE_STEP_MAX, AMBULANCE_STEP_MIN, HOSPITAL_HOLD_TICKS, SCENE_HOLD_TICKS, utc_now
+from repositories.database import fetch_all, fetch_one, update_record
 from services.geo_service import interpolate_towards
 from services.routing import get_travel_time
 

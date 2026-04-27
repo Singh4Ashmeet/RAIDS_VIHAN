@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from config import CITY_AMBULANCE_BASE_SPEED_KMH, CITY_CENTERS, TRAFFIC_STATE, utc_now
+from core.config import CITY_AMBULANCE_BASE_SPEED_KMH, CITY_CENTERS, TRAFFIC_STATE, utc_now
 from services.routing import get_travel_time
 
 

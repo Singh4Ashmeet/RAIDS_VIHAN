@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Mic, MicOff } from 'lucide-react'
 
@@ -100,10 +100,13 @@ function classifyReportPriority(report) {
 }
 
 function SelectField({ label, value, onChange, children }) {
+  const id = useId()
+
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-slate-300">{label}</label>
+      <label htmlFor={id} className="text-sm font-medium text-slate-300">{label}</label>
       <select
+        id={id}
         value={value}
         onChange={onChange}
         className="w-full rounded-xl border border-border bg-slate-800 px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
@@ -515,7 +518,7 @@ export default function SOSPortal() {
           <div className="mt-4">
             <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <label className="block text-sm font-medium text-slate-300">
+                <label htmlFor="emergency-report" className="block text-sm font-medium text-slate-300">
                   Emergency Report
                 </label>
                 <p className="mt-1 text-xs text-slate-500">
@@ -535,6 +538,7 @@ export default function SOSPortal() {
               </div>
             </div>
             <textarea
+              id="emergency-report"
               rows={4}
               value={complaint}
               onChange={(event) => setComplaint(event.target.value)}

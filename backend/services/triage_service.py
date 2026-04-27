@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 try:
-    from config import SEVERITY_ORDER, SEVERITY_PRIORITY, TRIAGE_KEYWORDS
+    from core.config import SEVERITY_ORDER, SEVERITY_PRIORITY, TRIAGE_KEYWORDS
 except ModuleNotFoundError:
-    from backend.config import SEVERITY_ORDER, SEVERITY_PRIORITY, TRIAGE_KEYWORDS
+    from backend.core.config import SEVERITY_ORDER, SEVERITY_PRIORITY, TRIAGE_KEYWORDS
 
 # Transliterated Hindi/Urdu signal words (Hinglish)
 # These handle mixed-language inputs where Hindi is typed

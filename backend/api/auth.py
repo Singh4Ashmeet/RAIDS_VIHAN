@@ -10,13 +10,13 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 
 try:
-    from config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
-    from database import fetch_one
-    from security import limiter
+    from core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+    from repositories.database import fetch_one
+    from core.security import limiter
 except ModuleNotFoundError:
-    from backend.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
-    from backend.database import fetch_one
-    from backend.security import limiter
+    from backend.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+    from backend.repositories.database import fetch_one
+    from backend.core.security import limiter
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")

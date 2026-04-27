@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from database import fetch_all
+from repositories.database import fetch_all
 from models.hospital import Hospital
-from utils.response import success
+from core.response import success
 
 router = APIRouter(prefix="/hospitals", tags=["hospitals"])
 

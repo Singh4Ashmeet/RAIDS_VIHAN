@@ -31,8 +31,8 @@ from api.overrides import router as overrides_router
 from api.patients import router as patients_router
 from api.system import router as system_router
 from api.websocket import router as websocket_router
-from config import DATA_DIR, isoformat_utc
-from database import (
+from core.config import DATA_DIR, isoformat_utc
+from repositories.database import (
     close_connection,
     count_rows,
     database_backend_label,
@@ -41,7 +41,7 @@ from database import (
     initialize_database,
     load_seed_data,
 )
-from security import limiter
+from core.security import limiter
 from services.anomaly_detector import get_recent_anomalies, get_total_detected
 from services.demand_predictor import CITY_BOUNDING_BOXES, build_density_grid, predict_demand, recommend_preposition
 from services.dispatch import select_dispatch
@@ -49,7 +49,7 @@ from services.dispatch_service import full_dispatch_pipeline
 from services.nlp_triage import triage_incident
 from services.offline_translator import get_translation_status
 from simulation.engine import SimulationEngine
-from utils.response import error, fallback, success, unwrap_envelope
+from core.response import error, fallback, success, unwrap_envelope
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

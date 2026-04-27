@@ -5,8 +5,8 @@ from __future__ import annotations
 import random
 from uuid import uuid4
 
-from config import CITY_BOUNDS, isoformat_utc
-from database import insert_record
+from core.config import CITY_BOUNDS, isoformat_utc
+from repositories.database import insert_record
 
 INCIDENT_DESCRIPTIONS: dict[str, tuple[str, ...]] = {
     "cardiac": (

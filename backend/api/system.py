@@ -7,14 +7,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 try:
-    from security import limiter
+    from core.security import limiter
 except ModuleNotFoundError:
-    from backend.security import limiter
+    from backend.core.security import limiter
 
 from services.analytics_service import broadcast_score_update, build_analytics_snapshot
 from services.dispatch_service import full_dispatch_pipeline
 from simulation.incident_sim import build_incident_payload, create_incident
-from utils.response import unwrap_envelope
+from core.response import unwrap_envelope
 
 router = APIRouter(tags=["system"])
 
