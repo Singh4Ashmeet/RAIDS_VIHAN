@@ -13,6 +13,11 @@ try:
 except ModuleNotFoundError:
     from backend.services.language_detector import detect_language, get_language_review_message
 
+try:
+    from services.offline_translator import translate_to_english
+except ModuleNotFoundError:
+    from backend.services.offline_translator import translate_to_english
+
 logger = logging.getLogger(__name__)
 
 LIGHTWEIGHT_TRIAGE = os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in {
@@ -369,11 +374,6 @@ async def triage_incident(complaint: str, city: str | None = None, sos_mode: boo
             return fallback_result
 
         if not lang_result["is_english"] and lang_result["detection_reliable"]:
-            try:
-                from services.offline_translator import translate_to_english
-            except ModuleNotFoundError:
-                from backend.services.offline_translator import translate_to_english
-
             translation = await translate_to_english(
                 complaint,
                 str(lang_result["language_code"]),

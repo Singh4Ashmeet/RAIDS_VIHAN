@@ -62,6 +62,8 @@ python backend/scripts/benchmark.py
 
 ## System Architecture
 
+For a step-by-step explanation of every major page, backend function group, dispatch flow, simulation, and operational workflow, see [System Walkthrough](docs/system_walkthrough.md). For a plain-language guide written for non-coders and non-CS users, see [Non-Technical User Guide](docs/non_technical_user_guide.md).
+
 ```text
 React + Vite frontend
         |

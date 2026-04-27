@@ -43,7 +43,25 @@ class LanguageDetectionTests(unittest.TestCase):
                 "language_code": "hi",
             }
         )
-        with patch("services.nlp_triage.translate_to_english", mocked_translation):
+        mocked_classification = AsyncMock(
+            return_value={
+                "incident_type": "cardiac",
+                "severity": "critical",
+                "ambulance_type_required": "ALS",
+                "requires_human_review": False,
+                "review_reason": None,
+                "type_classification": {},
+                "severity_classification": {},
+                "resource_requirement": {},
+                "triage_confidence": 0.92,
+                "triage_version": "nlp_v1",
+            }
+        )
+        with (
+            patch("services.nlp_triage.LIGHTWEIGHT_TRIAGE", False),
+            patch("services.nlp_triage.translate_to_english", mocked_translation),
+            patch("services.nlp_triage._run_nlp_classification", mocked_classification),
+        ):
             result = asyncio.run(triage_incident("seene mein dard hai"))
         self.assertEqual(result["triage_version"], "nlp_translated")
         self.assertTrue(result["requires_human_review"])
