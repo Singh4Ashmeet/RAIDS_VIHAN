@@ -42,7 +42,7 @@ The startup sequence is:
 
 ## 4. Database and Core Records
 
-The backend uses SQLite through a single shared `aiosqlite` connection. This is appropriate for a prototype and local development, but the production architecture document notes that a deployment-ready version should move to PostgreSQL with async connection pooling.
+The backend uses PostgreSQL through an `asyncpg` pool when `DATABASE_URL` is configured. If no PostgreSQL URL is set, it falls back to SQLite through a single shared `aiosqlite` connection for local development. This keeps the project easy to run locally while allowing the hosted deployment to use a managed Postgres database.
 
 The important tables are:
 
@@ -533,4 +533,3 @@ A new contributor should read the codebase in this order:
 9. `backend/services/demand_predictor.py` and `frontend/src/pages/admin/DemandHeatmap.jsx` for heatmap behavior.
 
 10. `docs/data_methodology.md`, `docs/ethics.md`, `docs/security.md`, and `docs/production_architecture.md` for research and deployment context.
-

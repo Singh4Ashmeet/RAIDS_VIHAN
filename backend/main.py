@@ -32,7 +32,15 @@ from api.patients import router as patients_router
 from api.system import router as system_router
 from api.websocket import router as websocket_router
 from config import DATA_DIR, isoformat_utc
-from database import close_connection, count_rows, fetch_all, fetch_one, initialize_database, load_seed_data
+from database import (
+    close_connection,
+    count_rows,
+    database_backend_label,
+    fetch_all,
+    fetch_one,
+    initialize_database,
+    load_seed_data,
+)
 from security import limiter
 from services.anomaly_detector import get_recent_anomalies, get_total_detected
 from services.demand_predictor import CITY_BOUNDING_BOXES, build_density_grid, predict_demand, recommend_preposition
@@ -134,8 +142,8 @@ async def health() -> dict[str, Any]:
             "cpu_executor_workers": 4,
             "active_threads": threading.active_count(),
             "event_loop_running": asyncio.get_running_loop().is_running(),
-            "database_type": "aiosqlite (single connection)",
-            "database_note": "Production requires PostgreSQL + asyncpg pool",
+            "database_type": database_backend_label(),
+            "database_note": "Uses DATABASE_URL for PostgreSQL; falls back to local SQLite when unset",
         },
     }
 

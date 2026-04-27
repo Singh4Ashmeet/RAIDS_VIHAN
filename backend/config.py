@@ -14,6 +14,8 @@ ROOT_DIR = Path(__file__).resolve().parent
 DATA_DIR = ROOT_DIR / "data"
 DEFAULT_DB_PATH = ROOT_DIR / "raid_nexus.db"
 DB_PATH_ENV_VAR = "RAID_NEXUS_DB_PATH"
+DATABASE_URL_ENV_VAR = "DATABASE_URL"
+POSTGRES_URL_ENV_VAR = "POSTGRES_URL"
 TRAINING_DATA_PATH_ENV_VAR = "RAID_NEXUS_TRAINING_DATA_PATH"
 
 ENV_FILE = ROOT_DIR / ".env"
@@ -134,6 +136,12 @@ def get_db_path() -> Path:
     """Return the active SQLite database path, honoring test/runtime overrides."""
 
     return Path(os.getenv(DB_PATH_ENV_VAR, str(DEFAULT_DB_PATH))).expanduser()
+
+
+def get_database_url() -> str | None:
+    """Return the configured PostgreSQL URL, if one is available."""
+
+    return os.getenv(DATABASE_URL_ENV_VAR) or os.getenv(POSTGRES_URL_ENV_VAR)
 
 
 def utc_now() -> datetime:

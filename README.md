@@ -77,7 +77,7 @@ FastAPI backend
         +-- Notification service
         +-- Simulation engine
         +-- LangGraph dispatch workflow
-        +-- SQLite persistence
+        +-- SQLite or PostgreSQL persistence
         +-- Optional Ollama explanation generation
 ```
 
@@ -95,7 +95,8 @@ FastAPI backend
 - FastAPI
 - Uvicorn
 - Pydantic
-- SQLite with `aiosqlite`
+- SQLite with `aiosqlite` for local fallback
+- PostgreSQL with `asyncpg` when `DATABASE_URL` is configured
 - LangGraph
 - `httpx`
 - `geopy`
@@ -134,7 +135,7 @@ RAIDS_VIHAN/
 
 ## Seeded Demo Data
 
-On startup, the backend initializes a local SQLite database and loads demo records. The current smoke tests expect:
+On startup, the backend initializes the configured database and loads demo records. If `DATABASE_URL` is set, RAID Nexus uses PostgreSQL through an asyncpg pool. If `DATABASE_URL` is not set, it falls back to a local SQLite database. The current smoke tests expect:
 
 - 15 ambulances
 - 10 hospitals
@@ -196,7 +197,7 @@ Vite is already configured to proxy both `/api` and `/ws` traffic to the backend
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.11 recommended. The Docker and Render runtime uses Python 3.11.
 - Node.js 18+
 - npm
 
@@ -265,6 +266,10 @@ npm test
 The backend supports runtime overrides through environment variables:
 
 - `RAID_NEXUS_DB_PATH` - custom SQLite database location
+- `DATABASE_URL` - PostgreSQL connection string for Neon, Supabase, or another Postgres host
+- `POSTGRES_URL` - optional alternate PostgreSQL connection string variable
+- `RAID_FORCE_SQLITE` - force SQLite even when a PostgreSQL URL exists
+- `RAID_POSTGRES_POOL_SIZE` - asyncpg pool size, default `5`
 - `RAID_NEXUS_TRAINING_DATA_PATH` - custom output path for generated ML data
 
 ## Explainability and LLM Fallback
@@ -279,7 +284,7 @@ If Ollama is unavailable, the system falls back to a deterministic explanation s
 ## Development Notes
 
 - frontend API requests are proxied through Vite to `localhost:8000`
-- backend state is persisted in SQLite
+- backend state is persisted in PostgreSQL when `DATABASE_URL` is configured, otherwise SQLite
 - simulation ticks run in the background after FastAPI startup
 - analytics are calculated for the current local day using the configured timezone
 

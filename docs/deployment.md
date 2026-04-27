@@ -1,4 +1,4 @@
-# Deployment — RAID Nexus
+# Deployment - RAID Nexus
 
 ## Recommended Target
 
@@ -19,10 +19,18 @@ Set these environment variables in Render:
 | `ADMIN_PASSWORD` | Yes | Choose a strong password. Do not commit it. |
 | `USER_USERNAME` | Yes | Default can be `user`. |
 | `USER_PASSWORD` | Yes | Choose a strong password. Do not commit it. |
+| `DATABASE_URL` | Recommended | PostgreSQL connection string from Neon, Supabase, or another Postgres host. If omitted, the app uses local SQLite. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Yes | Default `480`. |
 | `ALGORITHM` | Yes | Default `HS256`. |
+| `RAID_POSTGRES_POOL_SIZE` | Optional | Asyncpg pool size. Default `5`. |
 | `RAID_LIGHTWEIGHT_TRIAGE` | Recommended on free tier | Set to `1` for Render free tier; omit or set `0` for full NLP on larger instances. |
 | `RAID_DISABLE_SIMULATION` | Recommended on free tier | Set to `1` for hosted demos to prevent background simulation from consuming routing/API resources. |
+
+## Database Setup
+
+For a free managed Postgres database, create a Neon project and copy its pooled or direct connection string. Store it only as the Render `DATABASE_URL` environment variable. Do not commit it to the repository.
+
+On first boot with `DATABASE_URL` set, RAID Nexus creates the required tables, seeds the default users, and loads demo ambulance, hospital, and incident data if those tables are empty. Local development can continue using SQLite by leaving `DATABASE_URL` unset or setting `RAID_FORCE_SQLITE=1`.
 
 ## Resource Notes
 
@@ -37,7 +45,7 @@ Hosted demo deployments should also set `RAID_DISABLE_SIMULATION=1`. This disabl
 1. Push the repository to GitHub.
 2. In Render, create a new Blueprint from the repository.
 3. Render reads `render.yaml`, builds the Docker image, and starts the service.
-4. Add `ADMIN_PASSWORD` and `USER_PASSWORD` when prompted.
+4. Add `ADMIN_PASSWORD`, `USER_PASSWORD`, and `DATABASE_URL` when prompted.
 5. Open the service URL and verify `/health`, `/login`, and `/user/sos`.
 
 ## Expected First Boot

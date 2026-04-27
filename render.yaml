@@ -24,6 +24,10 @@ services:
         value: user
       - key: USER_PASSWORD
         sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: RAID_POSTGRES_POOL_SIZE
+        value: "5"
       - key: HF_HOME
         value: /opt/render/project/.cache/huggingface
       - key: TRANSFORMERS_CACHE
