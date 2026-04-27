@@ -1,6 +1,6 @@
 # RAID Nexus
 
-Real-time Autonomous Incident Dispatch and Decision System built for the Vihan 9.0 hackathon.
+Real-time Autonomous Incident Dispatch and Decision System built for GTBIT 2025-2029.
 
 RAID Nexus is a full-stack emergency response platform that simulates how an intelligent dispatch center can triage incoming medical emergencies, allocate ambulances, recommend hospitals, and stream live operational updates to both operators and end users.
 
@@ -105,7 +105,7 @@ FastAPI backend
 ## Project Structure
 
 ```text
-RAIDS_VIHAN/
+GTBIT_2025_2029/
 |-- backend/
 |   |-- api/             # REST and WebSocket routes
 |   |-- agents/          # LangGraph-based dispatch workflow

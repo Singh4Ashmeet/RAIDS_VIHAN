@@ -1,4 +1,4 @@
-# RAID Vihan root dependency reference
+# RAID Nexus GTBIT 2025-2029 dependency reference
 #
 # Backend dependencies below can be installed with:
 #   pip install -r requirements.txt

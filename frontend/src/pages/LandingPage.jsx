@@ -186,7 +186,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="border-t border-border py-8 text-center text-sm text-slate-500">
-        Copyright 2026 RAID Nexus | Vihan 9.0 Hackathon | Built for India
+        Copyright 2026 RAID Nexus | GTBIT 2025-2029 | Built for India
       </footer>
     </div>
   )
