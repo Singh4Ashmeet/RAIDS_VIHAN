@@ -5,7 +5,19 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  VITE_API_BASE_URL = "https://raid-nexus.onrender.com"
+  VITE_WS_BASE_URL = "https://raid-nexus.onrender.com"
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://raid-nexus.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/ws/*"
+  to = "https://raid-nexus.onrender.com/ws/:splat"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/*"

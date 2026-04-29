@@ -2,12 +2,13 @@ import axios from 'axios'
 import useAuthStore from '../store/authStore'
 
 const rawApiBase = import.meta.env.VITE_API_BASE_URL || ''
+const rawWsBase = import.meta.env.VITE_WS_BASE_URL || rawApiBase
 export const API_ROOT = rawApiBase
   ? `${rawApiBase.replace(/\/$/, '')}/api`
   : '/api'
 
-export const WS_ROOT = rawApiBase
-  ? rawApiBase.replace(/^http/, 'ws').replace(/\/$/, '')
+export const WS_ROOT = rawWsBase
+  ? rawWsBase.replace(/^http/, 'ws').replace(/\/$/, '')
   : null
 
 const api = axios.create({ baseURL: API_ROOT })
