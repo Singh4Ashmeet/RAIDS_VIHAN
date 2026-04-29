@@ -1,7 +1,5 @@
 """Incident API routes."""
 
-from __future__ import annotations
-
 from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
