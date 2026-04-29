@@ -1,21 +1,24 @@
 services:
   - type: web
-    name: raid-nexus
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./Dockerfile
-    healthCheckPath: /health
-    disk:
-      name: raid-nexus-cache
-      mountPath: /opt/render/project/.cache
-      sizeGB: 10
+    name: raid-nexus-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd backend && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: DATABASE_URL
+        sync: false
       - key: SECRET_KEY
         generateValue: true
-      - key: ALGORITHM
-        value: HS256
-      - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: "480"
+      - key: ENVIRONMENT
+        value: production
+      - key: CORS_ORIGINS
+        value: '["https://raid-nexus.onrender.com"]'
+      - key: ENABLE_NLP_TRIAGE
+        value: "false"
+      - key: ENABLE_TRANSLATION
+        value: "false"
+      - key: ENABLE_ANOMALY_DETECTION
+        value: "true"
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
@@ -24,17 +27,9 @@ services:
         value: user
       - key: USER_PASSWORD
         sync: false
-      - key: DATABASE_URL
-        sync: false
-      - key: RAID_POSTGRES_POOL_SIZE
-        value: "5"
-      - key: HF_HOME
-        value: /opt/render/project/.cache/huggingface
-      - key: TRANSFORMERS_CACHE
-        value: /opt/render/project/.cache/huggingface
-      - key: PYTHONUNBUFFERED
-        value: "1"
-      - key: RAID_LIGHTWEIGHT_TRIAGE
-        value: "1"
-      - key: RAID_DISABLE_SIMULATION
-        value: "1"
+
+  - type: web
+    name: raid-nexus-frontend
+    runtime: node
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm run preview -- --host 0.0.0.0 --port $PORT

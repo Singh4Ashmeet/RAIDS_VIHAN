@@ -59,6 +59,9 @@ const useDispatchStore = create((set, get) => ({
   wsStatus:     'disconnected',
   systemStatus: 'normal',
   _ws:          null,
+  _wsReconnectAttempts: 0,
+  _wsReconnectTimer: null,
+  _wsManualClose: false,
 
   pushNotification: (event) => {
     if (!event) return
@@ -191,25 +194,40 @@ const useDispatchStore = create((set, get) => ({
   },
 
   connectWS: () => {
-    if (get()._ws) return
+    if (get()._ws || get().wsStatus === 'connecting') return
+    const clearReconnectTimer = () => {
+      const timer = get()._wsReconnectTimer
+      if (timer) clearTimeout(timer)
+      set({ _wsReconnectTimer: null })
+    }
     const connect = () => {
-      const token = useAuthStore.getState().token || localStorage.getItem('raid_token')
+      clearReconnectTimer()
+      const token = useAuthStore.getState().token
       if (!token) {
-        set({ wsStatus: 'disconnected', _ws: null })
+        set({ wsStatus: 'disconnected', _ws: null, _wsReconnectAttempts: 0 })
         return
       }
+      set({ wsStatus: 'connecting', _wsManualClose: false })
       const wsUrl = WS_ROOT
         ? `${WS_ROOT}/ws/live${token ? `?token=${encodeURIComponent(token)}` : ''}`
         : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/live${token ? `?token=${encodeURIComponent(token)}` : ''}`
       const ws = new WebSocket(wsUrl)
-      ws.onopen  = () => set({ wsStatus: 'connected', _ws: ws })
+      ws.onopen  = () => set({ wsStatus: 'connected', _ws: ws, _wsReconnectAttempts: 0 })
       ws.onclose = (event) => {
         set({ wsStatus: 'disconnected', _ws: null })
         if (event.code === 1008) {
           useAuthStore.getState().logout()
           return
         }
-        setTimeout(connect, 3000)
+        if (get()._wsManualClose) return
+        const attempts = get()._wsReconnectAttempts + 1
+        if (attempts > 10) {
+          set({ wsStatus: 'failed', _wsReconnectAttempts: attempts })
+          return
+        }
+        const delay = Math.min(30000, 1000 * (2 ** Math.min(attempts - 1, 4)))
+        const timer = setTimeout(connect, delay)
+        set({ _wsReconnectAttempts: attempts, _wsReconnectTimer: timer })
       }
       ws.onerror = () => ws.close()
       ws.onmessage = (e) => {
@@ -333,12 +351,20 @@ const useDispatchStore = create((set, get) => ({
   },
 
   disconnectWS: () => {
+    const timer = get()._wsReconnectTimer
+    if (timer) clearTimeout(timer)
     const ws = get()._ws
     if (ws) {
       ws.onclose = null
       ws.close()
     }
-    set({ _ws: null, wsStatus: 'disconnected' })
+    set({
+      _ws: null,
+      wsStatus: 'disconnected',
+      _wsReconnectTimer: null,
+      _wsReconnectAttempts: 0,
+      _wsManualClose: true,
+    })
   },
 }))
 

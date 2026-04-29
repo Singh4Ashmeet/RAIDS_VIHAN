@@ -6,26 +6,29 @@ const AUTH_API_ROOT = rawApiBase
   ? `${rawApiBase.replace(/\/$/, '')}/api`
   : '/api'
 
-function clearAuthStorage() {
-  localStorage.removeItem('raid_token')
-  localStorage.removeItem('raid_role')
-  localStorage.removeItem('raid_username')
-  localStorage.removeItem('raid_name')
+let authMemory = {
+  token: null,
+  role: null,
+  username: null,
+  user: null,
 }
 
-const initialToken = localStorage.getItem('raid_token')
-const initialRole = localStorage.getItem('raid_role')
-const initialUsername = localStorage.getItem('raid_username')
+function unwrapEnvelope(payload) {
+  if (payload && typeof payload === 'object' && 'status' in payload && 'data' in payload) {
+    return payload.data
+  }
+  return payload
+}
 
 const useAuthStore = create((set, get) => ({
-  user:      initialUsername ? { username: initialUsername, role: initialRole } : null,
-  token:     initialToken,
-  role:      initialRole,
-  username:  initialUsername,
-  isAuthenticated: !!initialToken,
+  user: null,
+  token: null,
+  role: null,
+  username: null,
+  isAuthenticated: false,
   hasHydrated: false,
   isLoading: false,
-  error:     null,
+  error: null,
 
   login: async (username, password) => {
     set({ isLoading: true, error: null })
@@ -36,16 +39,20 @@ const useAuthStore = create((set, get) => ({
       formData.append('password', password)
 
       const res = await axios.post(`${AUTH_API_ROOT}/auth/login`, formData)
-      const { access_token: token, role } = res.data
+      const payload = unwrapEnvelope(res.data)
+      const { access_token: token, role } = payload
 
-      localStorage.setItem('raid_token', token)
-      localStorage.setItem('raid_role',  role)
-      localStorage.setItem('raid_username', normalizedUsername)
-      set({
+      authMemory = {
         token,
         role,
         username: normalizedUsername,
         user: { username: normalizedUsername, role },
+      }
+      set({
+        token,
+        role,
+        username: normalizedUsername,
+        user: authMemory.user,
         isAuthenticated: true,
         hasHydrated: true,
         isLoading: false,
@@ -53,14 +60,14 @@ const useAuthStore = create((set, get) => ({
       })
       return { ok: true, role }
     } catch (err) {
-      const message = err.response?.data?.detail || 'Incorrect username or password'
+      const message = err.response?.data?.message || err.response?.data?.detail || 'Incorrect username or password'
       set({ isLoading: false, error: message })
       return { ok: false, message }
     }
   },
 
   logout: (redirect = true) => {
-    clearAuthStorage()
+    authMemory = { token: null, role: null, username: null, user: null }
     set({
       user: null,
       token: null,
@@ -77,11 +84,11 @@ const useAuthStore = create((set, get) => ({
   },
 
   hydrate: async () => {
-    const token = localStorage.getItem('raid_token')
-    const role  = localStorage.getItem('raid_role')
-    const username = localStorage.getItem('raid_username')
+    const current = get()
+    const token = authMemory.token || current.token
+    const rememberedRole = authMemory.role || current.role
+    const rememberedUsername = authMemory.username || current.username
     if (!token) {
-      clearAuthStorage()
       set({
         user: null,
         token: null,
@@ -98,11 +105,15 @@ const useAuthStore = create((set, get) => ({
       const res = await axios.get(`${AUTH_API_ROOT}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const profile = res.data
-      const resolvedRole = profile.role || role
-      const resolvedUsername = profile.username || username
-      localStorage.setItem('raid_role', resolvedRole)
-      localStorage.setItem('raid_username', resolvedUsername)
+      const profile = unwrapEnvelope(res.data)
+      const resolvedRole = profile.role || rememberedRole
+      const resolvedUsername = profile.username || rememberedUsername
+      authMemory = {
+        token,
+        role: resolvedRole,
+        username: resolvedUsername,
+        user: profile,
+      }
       set({
         token,
         role: resolvedRole,
@@ -114,7 +125,7 @@ const useAuthStore = create((set, get) => ({
         error: null,
       })
     } catch {
-      clearAuthStorage()
+      authMemory = { token: null, role: null, username: null, user: null }
       set({
         user: null,
         token: null,
@@ -128,8 +139,8 @@ const useAuthStore = create((set, get) => ({
   },
 
   isAdmin: () => get().role === 'admin',
-  isUser:  () => get().role === 'user' || get().role === 'admin',
-  isAuthed:() => !!get().token && get().isAuthenticated,
+  isUser: () => get().role === 'user' || get().role === 'admin',
+  isAuthed: () => !!get().token && get().isAuthenticated,
 }))
 
 export default useAuthStore

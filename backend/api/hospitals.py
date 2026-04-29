@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from repositories.database import fetch_all
 from models.hospital import Hospital
 from core.response import success
+from repositories.hospital_repo import HospitalRepository
 
 router = APIRouter(prefix="/hospitals", tags=["hospitals"])
 
@@ -15,5 +15,5 @@ router = APIRouter(prefix="/hospitals", tags=["hospitals"])
 async def list_hospitals() -> dict[str, object]:
     """Return all hospitals with current live state."""
 
-    hospitals = [Hospital.model_validate(item).model_dump(mode="json") for item in await fetch_all("hospitals")]
+    hospitals = [Hospital.model_validate(item).model_dump(mode="json") for item in await HospitalRepository().get_all()]
     return success(hospitals)

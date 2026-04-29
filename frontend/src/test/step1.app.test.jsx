@@ -8,7 +8,6 @@ import useDispatchStore from '../store/dispatchStore'
 import { MockWebSocket } from './mocks/websocket'
 
 function resetAuth(role = null) {
-  localStorage.clear()
   useAuthStore.setState({
     user: role ? { username: role, role } : null,
     token: role ? `${role}-token` : null,
@@ -19,11 +18,6 @@ function resetAuth(role = null) {
     isLoading: false,
     error: null,
   })
-  if (role) {
-    localStorage.setItem('raid_token', `${role}-token`)
-    localStorage.setItem('raid_role', role)
-    localStorage.setItem('raid_username', role)
-  }
 }
 
 function resetDispatch() {

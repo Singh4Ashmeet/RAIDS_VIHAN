@@ -21,6 +21,7 @@ import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import EmptyState from '../../components/ui/EmptyState'
 import ErrorState from '../../components/ui/ErrorState'
+import ProgressBar from '../../components/ui/ProgressBar'
 import StatusDot from '../../components/ui/StatusDot'
 import api from '../../services/api'
 
@@ -481,12 +482,7 @@ export default function CommandCenter() {
                     <span>Occupancy</span>
                     <span>{Math.round(hospital?.occupancy_pct || 0)}%</span>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-800">
-                    <div
-                      className="h-2 rounded-full bg-brand-500"
-                      style={{ width: `${Math.min(100, Math.max(0, hospital?.occupancy_pct || 0))}%` }}
-                    />
-                  </div>
+                  <ProgressBar value={hospital?.occupancy_pct || 0} className="bg-brand-500" />
                 </div>
               </Card>
 
@@ -515,15 +511,7 @@ export default function CommandCenter() {
                     </button>
                   </div>
                   {lastOverride?.reason ? (
-                    <p
-                      className="mt-3 text-xs italic text-slate-400"
-                      style={{
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}
-                    >
+                    <p className="mt-3 line-clamp-2 text-xs italic text-slate-400">
                       {lastOverride.reason}
                     </p>
                   ) : null}
@@ -535,13 +523,10 @@ export default function CommandCenter() {
                   AI Explanation
                 </p>
                 <p
-                  className="mt-3 text-sm leading-6 text-slate-300"
-                  style={explExpanded ? undefined : {
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  }}
+                  className={clsx(
+                    'mt-3 text-sm leading-6 text-slate-300',
+                    !explExpanded && 'line-clamp-2'
+                  )}
                 >
                   {dispatchPlan?.explanation_text || 'AI routing analysis will appear here.'}
                 </p>
@@ -606,12 +591,7 @@ export default function CommandCenter() {
                             <span>{config.label}</span>
                             <span>{value.toFixed(2)}</span>
                           </div>
-                          <div className="h-2.5 rounded-full bg-slate-800">
-                            <div
-                              className={`h-2.5 rounded-full ${config.colorClassName}`}
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
+                          <ProgressBar value={percent} className={config.colorClassName} size="lg" />
                         </div>
                       )
                     })}

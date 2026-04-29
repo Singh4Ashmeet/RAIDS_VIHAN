@@ -7,7 +7,8 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from repositories.database import fetch_all
+from repositories.ambulance_repo import AmbulanceRepository
+from repositories.hospital_repo import HospitalRepository
 from services.geo_service import get_active_traffic_multiplier
 
 try:
@@ -23,8 +24,8 @@ _connection_lock = asyncio.Lock()
 async def state_snapshot_payload() -> dict[str, Any]:
     """Build the snapshot sent immediately after a WebSocket connection opens."""
 
-    ambulances = await fetch_all("ambulances")
-    hospitals = await fetch_all("hospitals")
+    ambulances = await AmbulanceRepository().get_all()
+    hospitals = await HospitalRepository().get_all()
     traffic = {hospital["city"]: get_active_traffic_multiplier(hospital["city"]) for hospital in hospitals}
     return {
         "type": "state_snapshot",

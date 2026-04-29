@@ -7,7 +7,10 @@ export class MockWebSocket {
     this.onclose = null
     this.onerror = null
     MockWebSocket.instance = this
-    setTimeout(() => this.onopen?.(), 0)
+    MockWebSocket.instances.push(this)
+    if (MockWebSocket.autoOpen) {
+      setTimeout(() => this.onopen?.(), 0)
+    }
   }
   send(data) { this._lastSent = data }
   close() { this.onclose?.({ code: 1000 }) }
@@ -19,3 +22,6 @@ export class MockWebSocket {
     this.onclose?.({ code: 1006 })
   }
 }
+
+MockWebSocket.instances = []
+MockWebSocket.autoOpen = true

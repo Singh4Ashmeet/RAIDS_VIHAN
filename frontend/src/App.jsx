@@ -59,7 +59,7 @@ export default function App() {
           <Route path="fleet" element={<FleetHospitals/>}/>
           <Route path="analytics" element={<Analytics/>}/>
           <Route path="scenario" element={<ScenarioLab/>}/>
-          <Route path="scenarios" element={<Navigate to="scenario" replace/>}/>
+          <Route path="scenarios" element={<ScenarioLab/>}/>
           <Route path="heatmap" element={<DemandHeatmap/>}/>
         </Route>
 

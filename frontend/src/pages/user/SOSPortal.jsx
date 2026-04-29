@@ -357,10 +357,7 @@ export default function SOSPortal() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div
-        className="mb-6 rounded-2xl p-6"
-        style={{ background: 'linear-gradient(135deg, #7f1d1d, #991b1b)' }}
-      >
+      <div className="mb-6 rounded-2xl bg-gradient-to-br from-red-900 to-red-800 p-6">
         <div className="mb-2 flex items-center gap-3">
           <span className="relative flex h-3 w-3">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"/>

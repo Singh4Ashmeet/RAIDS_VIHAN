@@ -1,25 +1,19 @@
+"""Compatibility shim for standardized response helpers."""
+
 from __future__ import annotations
 
 from typing import Any
 
 from fastapi.responses import JSONResponse
 
-def success(data, message="OK"):
-    return {"status": "success", "message": message, "data": data}
+from core.responses import APIResponse, fallback, success, unwrap_envelope
 
-def fallback(data, message):
-    return {"status": "fallback", "message": message, "data": data}
 
-def error(message, code=400):
+def error(message: str, code: int = 400, data: Any = None) -> JSONResponse:
     return JSONResponse(
         status_code=code,
-        content={"status": "error", "message": message, "data": None}
+        content={"status": "error", "message": message, "data": data},
     )
 
 
-def unwrap_envelope(payload: Any) -> tuple[Any, str | None, str | None]:
-    """Return the inner payload from the project's response envelope shape."""
-
-    if isinstance(payload, dict) and {"status", "message", "data"} <= payload.keys():
-        return payload.get("data"), payload.get("status"), payload.get("message")
-    return payload, None, None
+__all__ = ["APIResponse", "success", "fallback", "error", "unwrap_envelope"]

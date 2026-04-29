@@ -9,6 +9,11 @@ from threading import Lock
 from typing import Any
 
 try:
+    from core.config import settings
+except ModuleNotFoundError:
+    from backend.core.config import settings
+
+try:
     from services.language_detector import detect_language, get_language_review_message
 except ModuleNotFoundError:
     from backend.services.language_detector import detect_language, get_language_review_message
@@ -20,7 +25,7 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger(__name__)
 
-LIGHTWEIGHT_TRIAGE = os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in {
+LIGHTWEIGHT_TRIAGE = (not settings.ENABLE_NLP_TRIAGE) or os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -355,6 +360,7 @@ async def triage_incident(complaint: str, city: str | None = None, sos_mode: boo
 
     try:
         if LIGHTWEIGHT_TRIAGE:
+            logger.info("NLP triage disabled by config. Using keyword fallback.")
             fallback_result = _keyword_fallback_triage(
                 complaint,
                 sos_mode,

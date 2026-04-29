@@ -8,6 +8,7 @@ import Badge from '../../components/ui/Badge'
 import Input from '../../components/ui/Input'
 import Skeleton from '../../components/ui/Skeleton'
 import EmptyState from '../../components/ui/EmptyState'
+import ProgressBar from '../../components/ui/ProgressBar'
 
 const CITY_FILTERS = ['All', 'Delhi', 'Mumbai', 'Bengaluru', 'Chennai', 'Hyderabad']
 const STATUS_FILTERS = ['All', 'Accepting', 'Diverted']
@@ -154,12 +155,11 @@ export default function HospitalFinder() {
                       <span>Occupancy</span>
                       <span>{Math.round(h.occupancy_pct)}%</span>
                     </div>
-                    <div className="h-2 rounded-full bg-slate-700">
-                      <div
-                        className={`h-2 rounded-full ${occupancyTone(h)}`}
-                        style={{ width: `${h.occupancy_pct}%` }}
-                      />
-                    </div>
+                    <ProgressBar
+                      value={h.occupancy_pct}
+                      className={occupancyTone(h)}
+                      trackClassName="bg-slate-700"
+                    />
                   </div>
 
                   <div className="mt-5 grid grid-cols-3 gap-3 text-center">
@@ -202,12 +202,13 @@ export default function HospitalFinder() {
                       <span>Acceptance score</span>
                       <span>{Math.round((h.acceptance_score || 0) * 100)}%</span>
                     </div>
-                    <div className="h-1 rounded-full bg-slate-700">
-                      <div
-                        className="h-1 rounded-full bg-purple-500"
-                        style={{ width: `${Math.max(0, Math.min(100, (h.acceptance_score || 0) * 100))}%` }}
-                      />
-                    </div>
+                    <ProgressBar
+                      value={h.acceptance_score || 0}
+                      max={1}
+                      className="bg-purple-500"
+                      size="sm"
+                      trackClassName="bg-slate-700"
+                    />
                   </div>
 
                   <p className={`mt-4 text-sm font-medium ${

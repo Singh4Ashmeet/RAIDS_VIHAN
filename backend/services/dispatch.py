@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Optional
 
 from services.routing import get_travel_time
 
@@ -275,7 +275,7 @@ async def select_dispatch(
     incident: dict,
     ambulances: list[dict],
     hospitals: list[dict],
-    weights: DispatchWeights = None,
+    weights: Optional[DispatchWeights] = None,
 ) -> dict:
     """Select the best ambulance and hospital pair for an incident."""
 

@@ -9,6 +9,7 @@ import warnings
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from core.config import get_db_path
 from main import create_app
@@ -35,6 +36,18 @@ class RaidNexusSmokeTests(unittest.TestCase):
         for response in responses:
             response.close()
 
+    def _login(self, client: TestClient, username: str = "admin", password: str = "admin123") -> dict:
+        limiter._storage.reset()
+        response = client.post(
+            "/api/auth/login",
+            data={"username": username, "password": password},
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = self._unwrap_payload(response.json())
+        self.assertIn("access_token", payload)
+        return payload
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         temp_root = Path(self.temp_dir.name)
@@ -52,6 +65,34 @@ class RaidNexusSmokeTests(unittest.TestCase):
         os.environ.pop("RAID_NEXUS_DB_PATH", None)
         os.environ.pop("RAID_NEXUS_TRAINING_DATA_PATH", None)
         self.temp_dir.cleanup()
+
+    def test_health_check_returns_ok(self) -> None:
+        with TestClient(create_app()) as client:
+            health = client.get("/health")
+            self.assertEqual(health.status_code, 200)
+            self.assertEqual(health.json()["status"], "ok")
+            self._close_responses(health)
+
+    def test_ambulances_endpoint(self) -> None:
+        with TestClient(create_app()) as client:
+            ambulances = client.get("/api/ambulances")
+            self.assertEqual(ambulances.status_code, 200)
+            self.assertEqual(len(self._unwrap_payload(ambulances.json())), 15)
+            self._close_responses(ambulances)
+
+    def test_hospitals_endpoint(self) -> None:
+        with TestClient(create_app()) as client:
+            hospitals = client.get("/api/hospitals")
+            self.assertEqual(hospitals.status_code, 200)
+            self.assertEqual(len(self._unwrap_payload(hospitals.json())), 10)
+            self._close_responses(hospitals)
+
+    def test_incidents_list(self) -> None:
+        with TestClient(create_app()) as client:
+            incidents = client.get("/api/incidents")
+            self.assertEqual(incidents.status_code, 200)
+            self.assertEqual(len(self._unwrap_payload(incidents.json())), 50)
+            self._close_responses(incidents)
 
     def test_health_and_seed_counts(self) -> None:
         with TestClient(create_app()) as client:
@@ -83,7 +124,7 @@ class RaidNexusSmokeTests(unittest.TestCase):
             self.assertEqual(len(self._unwrap_payload(incidents.json())), 50)
             self._close_responses(root, spa_route, docs, favicon, health, ambulances, hospitals, incidents)
 
-    def test_patient_dispatch_flow(self) -> None:
+    def test_dispatch_pipeline(self) -> None:
         with TestClient(create_app()) as client:
             response = client.post(
                 "/api/patients",
@@ -115,10 +156,80 @@ class RaidNexusSmokeTests(unittest.TestCase):
             self.assertEqual(patient_details.status_code, 200)
             self.assertEqual(dispatch_details.status_code, 200)
             self.assertEqual(analytics.status_code, 200)
-            self.assertIsNotNone(patient_details.json()["assigned_hospital"])
-            self.assertGreaterEqual(analytics.json()["dispatches_today"], 1)
-            self.assertGreaterEqual(analytics.json()["hospitals_notified"], 1)
+            patient_payload = self._unwrap_payload(patient_details.json())
+            analytics_payload = self._unwrap_payload(analytics.json())
+            self.assertIsNotNone(patient_payload["assigned_hospital"])
+            self.assertGreaterEqual(analytics_payload["dispatches_today"], 1)
+            self.assertGreaterEqual(analytics_payload["hospitals_notified"], 1)
             self._close_responses(response, patient_details, dispatch_details, analytics)
+
+    def test_analytics_endpoint(self) -> None:
+        with TestClient(create_app()) as client:
+            analytics = client.get("/api/analytics")
+            self.assertEqual(analytics.status_code, 200)
+            payload = self._unwrap_payload(analytics.json())
+            self.assertIn("dispatches_today", payload)
+            self.assertIn("hospitals_notified", payload)
+            self._close_responses(analytics)
+
+    def test_websocket_connection(self) -> None:
+        with TestClient(create_app()) as client:
+            token = self._login(client)["access_token"]
+            with client.websocket_connect(f"/ws/live?token={token}") as websocket:
+                payload = websocket.receive_json()
+                self.assertEqual(payload["type"], "state_snapshot")
+                self.assertEqual(len(payload["ambulances"]), 15)
+
+    def test_auth_login(self) -> None:
+        with TestClient(create_app()) as client:
+            payload = self._login(client)
+            self.assertEqual(payload["role"], "admin")
+            self.assertEqual(payload["token_type"], "bearer")
+
+    def test_auth_login_wrong_password(self) -> None:
+        with TestClient(create_app()) as client:
+            limiter._storage.reset()
+            response = client.post(
+                "/api/auth/login",
+                data={"username": "admin", "password": "wrong-password"},
+                headers={"content-type": "application/x-www-form-urlencoded"},
+            )
+            self.assertEqual(response.status_code, 401)
+            payload = response.json()
+            self.assertEqual(payload["status"], "error")
+            self._close_responses(response)
+
+    def test_admin_route_requires_auth(self) -> None:
+        with TestClient(create_app()) as client:
+            response = client.get("/api/overrides/stats")
+            self.assertEqual(response.status_code, 401)
+            payload = response.json()
+            self.assertEqual(payload["status"], "error")
+            self._close_responses(response)
+
+    def test_override_requires_reason(self) -> None:
+        with TestClient(create_app()) as client:
+            token = self._login(client)["access_token"]
+            response = client.post(
+                "/api/overrides/request",
+                json={
+                    "dispatch_id": "DISP-DOES-NOT-MATTER",
+                    "proposed_ambulance_id": "AMB-001",
+                    "proposed_hospital_id": "HOSP-001",
+                    "reason": "too short",
+                    "reason_category": "local_knowledge",
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("minimum 20", response.json()["message"])
+            self._close_responses(response)
+
+    def test_websocket_rejects_missing_token(self) -> None:
+        with TestClient(create_app()) as client:
+            with self.assertRaises(WebSocketDisconnect):
+                with client.websocket_connect("/ws/live"):
+                    pass
 
     def test_scenarios_and_generator(self) -> None:
         with TestClient(create_app()) as client:
@@ -132,9 +243,12 @@ class RaidNexusSmokeTests(unittest.TestCase):
             self.assertEqual(traffic.status_code, 200)
             self.assertEqual(breakdown.status_code, 200)
             self.assertEqual(overload.status_code, 200)
-            self.assertEqual(traffic.json()["traffic"]["multiplier"], 2.5)
-            self.assertEqual(breakdown.json()["breakdown"]["ambulance_id"], "AMB-007")
-            self.assertEqual(overload.json()["overload"]["hospital_id"], "HOSP-005")
+            traffic_payload = self._unwrap_payload(traffic.json())
+            breakdown_payload = self._unwrap_payload(breakdown.json())
+            overload_payload = self._unwrap_payload(overload.json())
+            self.assertEqual(traffic_payload["traffic"]["multiplier"], 2.5)
+            self.assertEqual(breakdown_payload["breakdown"]["ambulance_id"], "AMB-007")
+            self.assertEqual(overload_payload["overload"]["hospital_id"], "HOSP-005")
             self._close_responses(traffic, breakdown, overload)
 
         dataset = generate_training_data()

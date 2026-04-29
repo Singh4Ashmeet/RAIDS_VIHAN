@@ -31,16 +31,19 @@ from api.overrides import router as overrides_router
 from api.patients import router as patients_router
 from api.system import router as system_router
 from api.websocket import router as websocket_router
-from core.config import DATA_DIR, isoformat_utc
+from core.config import DATA_DIR, isoformat_utc, settings
 from repositories.database import (
+    IS_POSTGRES,
     close_connection,
     count_rows,
     database_backend_label,
-    fetch_all,
-    fetch_one,
     initialize_database,
     load_seed_data,
 )
+from repositories.ambulance_repo import AmbulanceRepository
+from repositories.hospital_repo import HospitalRepository
+from repositories.incident_repo import IncidentRepository
+from repositories.patient_repo import PatientRepository
 from core.security import limiter
 from services.anomaly_detector import get_recent_anomalies, get_total_detected
 from services.demand_predictor import CITY_BOUNDING_BOXES, build_density_grid, predict_demand, recommend_preposition
@@ -50,6 +53,8 @@ from services.nlp_triage import triage_incident
 from services.offline_translator import get_translation_status
 from simulation.engine import SimulationEngine
 from core.response import error, fallback, success, unwrap_envelope
+from alembic import command
+from alembic.config import Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -70,13 +75,13 @@ FRONTEND_RESERVED_PATHS = {"api", "docs", "health", "openapi.json", "redoc", "ws
 BENCHMARK_RESULTS_FILE = DATA_DIR / "benchmark_results.json"
 LITERATURE_COMPARISON_FILE = DATA_DIR / "literature_comparison.json"
 _BENCHMARK_CACHE: dict[str, object] = {}
-LIGHTWEIGHT_TRIAGE = os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in {
+LIGHTWEIGHT_TRIAGE = (not settings.ENABLE_NLP_TRIAGE) or os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in {
     "1",
     "true",
     "yes",
     "on",
 }
-DISABLE_SIMULATION = os.getenv("RAID_DISABLE_SIMULATION", "").strip().lower() in {
+DISABLE_SIMULATION = settings.RAID_DISABLE_SIMULATION or os.getenv("RAID_DISABLE_SIMULATION", "").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -168,25 +173,47 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
     return default_response
 
 
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Return a stable envelope for uncaught errors."""
+
+    logger.error("Unhandled error on %s: %s", request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "message": "Internal server error", "data": None},
+    )
+
+
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Return HTTP errors in the standard envelope."""
+
+    _ = request
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "error", "message": exc.detail, "data": None},
+        headers=getattr(exc, "headers", None),
+    )
+
+
 async def benchmark_results() -> JSONResponse:
     """Return cached benchmark results from disk when available."""
 
     cached_payload = _BENCHMARK_CACHE.get("data")
     if cached_payload is not None:
-        return JSONResponse(content=cached_payload, media_type="application/json")
+        return JSONResponse(content=success(cached_payload), media_type="application/json")
 
     if not BENCHMARK_RESULTS_FILE.is_file():
         return JSONResponse(
             content={
-                "error": "Benchmark not run yet",
-                "run_command": "python backend/scripts/benchmark.py --split test",
+                "status": "error",
+                "message": "Benchmark not run yet",
+                "data": {"run_command": "python backend/scripts/benchmark.py --split test"},
             },
             media_type="application/json",
         )
 
     payload = await asyncio.to_thread(_load_json_payload, BENCHMARK_RESULTS_FILE)
     _BENCHMARK_CACHE["data"] = payload
-    return JSONResponse(content=payload, media_type="application/json")
+    return JSONResponse(content=success(payload), media_type="application/json")
 
 
 async def fairness_results(_admin: Any = Depends(get_current_admin)) -> JSONResponse:
@@ -196,8 +223,9 @@ async def fairness_results(_admin: Any = Depends(get_current_admin)) -> JSONResp
     if not BENCHMARK_RESULTS_FILE.is_file():
         return JSONResponse(
             content={
-                "error": "Run benchmark first",
-                "command": "python backend/scripts/benchmark.py --split test",
+                "status": "error",
+                "message": "Run benchmark first",
+                "data": {"command": "python backend/scripts/benchmark.py --split test"},
             },
             media_type="application/json",
         )
@@ -207,13 +235,14 @@ async def fairness_results(_admin: Any = Depends(get_current_admin)) -> JSONResp
     if fairness is None:
         return JSONResponse(
             content={
-                "error": "Run benchmark first",
-                "command": "python backend/scripts/benchmark.py --split test",
+                "status": "error",
+                "message": "Run benchmark first",
+                "data": {"command": "python backend/scripts/benchmark.py --split test"},
             },
             media_type="application/json",
         )
 
-    return JSONResponse(content=fairness, media_type="application/json")
+    return JSONResponse(content=success(fairness), media_type="application/json")
 
 
 async def literature_comparison_results(_admin: Any = Depends(get_current_admin)) -> JSONResponse:
@@ -224,36 +253,37 @@ async def literature_comparison_results(_admin: Any = Depends(get_current_admin)
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={
-                "error": "Literature comparison not generated yet",
-                "run_commands": [
+                "status": "error",
+                "message": "Literature comparison not generated yet",
+                "data": {"run_commands": [
                     "python backend/scripts/benchmark.py --split test",
                     "python backend/scripts/benchmark.py --mode cross_city",
                     "python backend/scripts/literature_comparison.py",
-                ],
+                ]},
             },
             media_type="application/json",
         )
 
     payload = await asyncio.to_thread(_load_json_payload, LITERATURE_COMPARISON_FILE)
-    return JSONResponse(content=payload, media_type="application/json")
+    return JSONResponse(content=success(payload), media_type="application/json")
 
 
 async def anomaly_results(_admin: Any = Depends(get_current_admin)) -> dict[str, Any]:
     """Return recent anomaly detections for admins."""
 
     _ = _admin
-    return {
+    return success({
         "recent_anomalies": get_recent_anomalies(limit=20),
         "total_detected": get_total_detected(),
         "monitoring_window": "last 200 incidents",
-    }
+    })
 
 
 async def translation_status_results(_admin: Any = Depends(get_current_admin)) -> dict[str, Any]:
     """Return loaded offline-translation model status for admins."""
 
     _ = _admin
-    return await get_translation_status()
+    return success(await get_translation_status())
 
 
 def _canonical_demand_city(city: str) -> str:
@@ -284,7 +314,7 @@ async def demand_heatmap(
         lookahead_minutes=lookahead,
         density_grid=density_grid,
     )
-    ambulances = await fetch_all("ambulances", where_clause="city = ?", params=(canonical_city,))
+    ambulances = await AmbulanceRepository().get_all(canonical_city)
     preposition_recommendations = await recommend_preposition(
         canonical_city,
         ambulances,
@@ -292,13 +322,13 @@ async def demand_heatmap(
         lookahead_minutes=lookahead,
         hotspots=hotspots,
     )
-    return {
+    return success({
         "city": canonical_city,
         "lookahead_minutes": lookahead,
         "hotspots": hotspots,
         "generated_at": isoformat_utc(),
         "preposition_recommendations": preposition_recommendations,
-    }
+    })
 
 
 def _frontend_response(path: str = "") -> Response:
@@ -343,13 +373,13 @@ async def favicon() -> Response:
 async def trigger_dispatch(payload: DispatchRequest, response: Response) -> dict[str, Any] | JSONResponse:
     """Select and execute a dispatch using the formal multi-objective scorer."""
 
-    incident = await fetch_one("incidents", payload.incident_id)
+    incident = await IncidentRepository().get_by_id(payload.incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found.")
-    patient = await fetch_one("patients", payload.patient_id) if payload.patient_id else None
+    patient = await PatientRepository().get_by_id(payload.patient_id) if payload.patient_id else None
 
-    ambulances = await fetch_all("ambulances")
-    hospitals = await fetch_all("hospitals")
+    ambulances = await AmbulanceRepository().get_all()
+    hospitals = await HospitalRepository().get_all()
     triage_source = patient["chief_complaint"] if patient else incident["description"]
     triage = await triage_incident(
         triage_source,
@@ -391,6 +421,15 @@ async def trigger_dispatch(payload: DispatchRequest, response: Response) -> dict
     return success(dispatch_plan)
 
 
+def run_migrations() -> None:
+    """Apply Alembic migrations for managed PostgreSQL deployments."""
+
+    backend_dir = Path(__file__).resolve().parent
+    alembic_cfg = Config(str(backend_dir / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    command.upgrade(alembic_cfg, "head")
+
+
 async def frontend_app(frontend_path: str) -> Response:
     """Serve built frontend assets and SPA fallback routes."""
 
@@ -405,6 +444,9 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     loop.set_default_executor(executor)
     logger.info("CPU thread pool initialized: 4 workers")
+    if settings.ENVIRONMENT == "production" and IS_POSTGRES:
+        await asyncio.to_thread(run_migrations)
+        logger.info("Database migrations applied")
     await initialize_database()
     inserted = await load_seed_data()
     totals = {
@@ -422,11 +464,10 @@ async def lifespan(app: FastAPI):
         totals["incidents"],
     )
     if LIGHTWEIGHT_TRIAGE:
-        logger.info("Hosted lightweight triage mode active; skipping Hugging Face model preloading.")
+        logger.info("NLP triage disabled/lightweight mode active; skipping Hugging Face model preloading.")
     else:
         logger.info("NLP triage model loading in background... First run may download about 1.6GB.")
         from services.nlp_triage import _get_classifier
-        from services.offline_translator import _load_translation_pipeline
 
         async def _preload_nlp_triage_model() -> None:
             try:
@@ -434,15 +475,18 @@ async def lifespan(app: FastAPI):
             except Exception as exc:
                 logger.warning("NLP triage model preload failed: %s", exc)
 
-        async def _preload_hindi_translation_model() -> None:
-            try:
-                await asyncio.to_thread(_load_translation_pipeline, "Helsinki-NLP/opus-mt-hi-en")
-            except Exception as exc:
-                logger.warning("Hindi translation model preload failed: %s", exc)
-
         asyncio.create_task(_preload_nlp_triage_model())
-        logger.info("Hindi translation model preloading in background...")
-        asyncio.create_task(_preload_hindi_translation_model())
+        if settings.ENABLE_TRANSLATION:
+            from services.offline_translator import _load_translation_pipeline
+
+            async def _preload_hindi_translation_model() -> None:
+                try:
+                    await asyncio.to_thread(_load_translation_pipeline, "Helsinki-NLP/opus-mt-hi-en")
+                except Exception as exc:
+                    logger.warning("Hindi translation model preload failed: %s", exc)
+
+            logger.info("Hindi translation model preloading in background...")
+            asyncio.create_task(_preload_hindi_translation_model())
     app.state.density_grid = await asyncio.to_thread(build_density_grid)
     app.state.simulation_engine = SimulationEngine()
     if DISABLE_SIMULATION:
@@ -472,7 +516,7 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -480,6 +524,8 @@ def create_app() -> FastAPI:
     application.add_middleware(TimingMiddleware)
     application.state.limiter = limiter
     application.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+    application.add_exception_handler(HTTPException, http_exception_handler)
+    application.add_exception_handler(Exception, global_exception_handler)
 
     application.include_router(websocket_router)
     application.include_router(auth_router, prefix="/api")

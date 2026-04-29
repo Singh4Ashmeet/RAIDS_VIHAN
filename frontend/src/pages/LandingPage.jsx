@@ -13,43 +13,43 @@ import Button from '../components/ui/Button'
 const features = [
   {
     icon: Brain,
-    iconBg: 'rgba(168, 85, 247, 0.2)',
-    iconColor: '#c084fc',
+    iconBgClass: 'bg-purple-500/20',
+    iconColorClass: 'text-purple-400',
     title: 'AI Triage',
     description: 'Severity classification under 200ms using trained ML models.',
   },
   {
     icon: Truck,
-    iconBg: 'rgba(59, 130, 246, 0.2)',
-    iconColor: '#60a5fa',
+    iconBgClass: 'bg-blue-500/20',
+    iconColorClass: 'text-blue-400',
     title: 'Smart Routing',
     description: 'Nearest available unit with live traffic-aware ETA scoring.',
   },
   {
     icon: Building2,
-    iconBg: 'rgba(16, 185, 129, 0.2)',
-    iconColor: '#34d399',
+    iconBgClass: 'bg-emerald-500/20',
+    iconColorClass: 'text-emerald-400',
     title: 'Hospital Match',
     description: 'Bed availability, specialization, and occupancy scoring.',
   },
   {
     icon: Radio,
-    iconBg: 'rgba(245, 158, 11, 0.2)',
-    iconColor: '#fbbf24',
+    iconBgClass: 'bg-amber-500/20',
+    iconColorClass: 'text-amber-400',
     title: 'Live Tracking',
     description: 'WebSocket updates stream ambulance and hospital state in real time.',
   },
   {
     icon: RefreshCw,
-    iconBg: 'rgba(239, 68, 68, 0.2)',
-    iconColor: '#f87171',
+    iconBgClass: 'bg-red-500/20',
+    iconColorClass: 'text-red-400',
     title: 'Fallback Logic',
     description: 'Never crashes. Queues incidents when all units are deployed.',
   },
   {
     icon: BarChart2,
-    iconBg: 'rgba(34, 211, 238, 0.2)',
-    iconColor: '#67e8f9',
+    iconBgClass: 'bg-cyan-500/20',
+    iconColorClass: 'text-cyan-300',
     title: 'Analytics',
     description: 'Compare AI vs baseline dispatch performance with live metrics.',
   },
@@ -86,30 +86,7 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      <section
-        className="relative flex min-h-screen items-center justify-center overflow-hidden"
-        style={{
-          backgroundImage: [
-            'linear-gradient(rgba(51,65,85,0.4) 1px, transparent 1px)',
-            'linear-gradient(to right, rgba(51,65,85,0.4) 1px, transparent 1px)',
-          ].join(', '),
-          backgroundSize: '48px 48px',
-          position: 'relative',
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%,-50%)',
-            width: 'min(72vw, 500px)',
-            height: 'min(72vw, 500px)',
-            background: 'radial-gradient(circle, rgba(37,99,235,0.15), transparent 70%)',
-            borderRadius: '50%',
-            pointerEvents: 'none',
-          }}
-        />
+      <section className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950">
         <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
           <div className="mb-6 inline-block rounded-full border border-red-500/30 bg-red-500/10 px-4 py-1.5 text-sm text-red-400">
             AI-Powered Emergency Dispatch
@@ -118,14 +95,7 @@ export default function LandingPage() {
             <span className="block">Save Lives Faster</span>
             <span className="block">
               With{' '}
-              <span
-                style={{
-                  background: 'linear-gradient(to right, #60a5fa, #a78bfa)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
+              <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
                 Intelligent Routing
               </span>
             </span>
@@ -167,11 +137,8 @@ export default function LandingPage() {
                 key={feature.title}
                 className="cursor-default rounded-2xl border border-border bg-card p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-500/50"
               >
-                <div
-                  className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl"
-                  style={{ background: feature.iconBg }}
-                >
-                  <Icon size={20} style={{ color: feature.iconColor }}/>
+                <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${feature.iconBgClass}`}>
+                  <Icon size={20} className={feature.iconColorClass}/>
                 </div>
                 <h3 className="mb-2 text-lg font-semibold text-white">
                   {feature.title}

@@ -1,0 +1,46 @@
+name: RAID Nexus CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Lint
+        run: |
+          pip install ruff
+          ruff check backend/
+      - name: Test (SQLite mode - no DATABASE_URL set)
+        run: |
+          cd backend
+          python -m pytest tests/ -v --tb=short
+        env:
+          ENVIRONMENT: test
+          SECRET_KEY: test-secret-key
+          RAID_FORCE_SQLITE: "1"
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+      - name: Install
+        run: cd frontend && npm ci
+      - name: Lint
+        run: cd frontend && npm run lint || true
+      - name: Test
+        run: cd frontend && npm test -- --run
+      - name: Build
+        run: cd frontend && npm run build

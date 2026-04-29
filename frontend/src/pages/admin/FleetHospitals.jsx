@@ -8,6 +8,7 @@ import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import Skeleton from '../../components/ui/Skeleton'
 import EmptyState from '../../components/ui/EmptyState'
+import ProgressBar from '../../components/ui/ProgressBar'
 import StatusDot from '../../components/ui/StatusDot'
 
 const TABS = ['Fleet', 'Hospitals']
@@ -141,17 +142,13 @@ export default function FleetHospitals() {
                   </div>
                   <div className="mt-4">
                     <p className="mb-2 text-xs text-slate-400">Crew readiness</p>
-                    <div className="h-1 rounded-full bg-slate-700">
-                      <div
-                        className={clsx(
-                          'h-1 rounded-full',
-                          crewColor(amb.crew_readiness || 0)
-                        )}
-                        style={{
-                          width: `${Math.max(0, Math.min(100, (amb.crew_readiness || 0) * 100))}%`,
-                        }}
-                      />
-                    </div>
+                    <ProgressBar
+                      value={amb.crew_readiness || 0}
+                      max={1}
+                      className={crewColor(amb.crew_readiness || 0)}
+                      size="sm"
+                      trackClassName="bg-slate-700"
+                    />
                     <p className="mt-2 text-xs text-slate-400">
                       {Math.round((amb.crew_readiness || 0) * 100)}% ready
                     </p>
@@ -210,15 +207,12 @@ export default function FleetHospitals() {
                         <span>Occupancy</span>
                         <span>{Math.round(occupancyPct)}%</span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-slate-700">
-                        <div
-                          className={clsx(
-                            'h-1.5 rounded-full transition-all',
-                            barColor(occupancyPct)
-                          )}
-                          style={{ width: `${occupancyPct}%` }}
-                        />
-                      </div>
+                      <ProgressBar
+                        value={occupancyPct}
+                        className={barColor(occupancyPct)}
+                        size="sm"
+                        trackClassName="bg-slate-700"
+                      />
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">

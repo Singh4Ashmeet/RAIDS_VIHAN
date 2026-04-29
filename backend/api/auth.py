@@ -11,12 +11,14 @@ from pydantic import BaseModel
 
 try:
     from core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
-    from repositories.database import fetch_one
+    from core.response import success
     from core.security import limiter
+    from repositories.user_repo import UserRepository
 except ModuleNotFoundError:
     from backend.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
-    from backend.repositories.database import fetch_one
+    from backend.core.response import success
     from backend.core.security import limiter
+    from backend.repositories.user_repo import UserRepository
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -72,14 +74,14 @@ def _public_user(user: dict[str, Any]) -> dict[str, Any]:
     return sanitized
 
 
-@router.post("/auth/login", response_model=Token)
+@router.post("/auth/login", response_model=None)
 @limiter.limit("10/minute")
-async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()) -> dict[str, Any]:
     """Authenticate a user and issue a bearer token."""
 
     _ = request
     username = form_data.username.strip()
-    user = await fetch_one("users", username, id_field="username")
+    user = await UserRepository().get_by_username(username)
     if user is None or not verify_password(form_data.password, str(user["hashed_password"])):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -92,12 +94,13 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     access_token = create_access_token(
         data={"sub": user["username"], "role": user["role"]},
     )
-    return Token(
+    token = Token(
         access_token=access_token,
         token_type="bearer",
         role=str(user["role"]),
         username=str(user["username"]),
     )
+    return success(token.model_dump())
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
@@ -115,7 +118,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any
     if token_data.username is None:
         raise _auth_error()
 
-    user = await fetch_one("users", token_data.username, id_field="username")
+    user = await UserRepository().get_by_username(token_data.username)
     if user is None or not user.get("is_active"):
         raise _auth_error()
     return _public_user(user)
@@ -136,7 +139,7 @@ async def verify_ws_token(token: str | None) -> dict[str, Any] | None:
     if not username:
         return None
 
-    user = await fetch_one("users", username, id_field="username")
+    user = await UserRepository().get_by_username(username)
     if user is None or not user.get("is_active"):
         return None
     return _public_user(user)
@@ -160,9 +163,9 @@ async def get_current_any_user(user: dict[str, Any] = Depends(get_current_user))
 async def me(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     """Return the current authenticated user's public profile."""
 
-    return {
+    return success({
         "id": current_user["id"],
         "username": current_user["username"],
         "role": current_user["role"],
         "full_name": current_user.get("full_name"),
-    }
+    })

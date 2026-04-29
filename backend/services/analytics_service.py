@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from statistics import mean
-from typing import Any
 
 from core.config import KOLKATA_TZ
-from repositories.database import fetch_all
+from repositories.dispatch_repo import DispatchRepository
+from repositories.incident_repo import IncidentRepository
+from repositories.notification_repo import NotificationRepository
 
 
 def _is_today_local(timestamp: str) -> bool:
@@ -29,9 +30,12 @@ def _score_update_analytics(analytics: dict[str, float | int]) -> dict[str, floa
 async def build_analytics_snapshot() -> dict[str, float | int]:
     """Return current daily analytics for the local timezone."""
 
-    incidents = [item for item in await fetch_all("incidents") if _is_today_local(item["created_at"])]
-    dispatches = [item for item in await fetch_all("dispatch_plans") if _is_today_local(item["created_at"])]
-    notifications = [item for item in await fetch_all("notifications") if _is_today_local(item["created_at"])]
+    incident_repo = IncidentRepository()
+    dispatch_repo = DispatchRepository()
+    notification_repo = NotificationRepository()
+    incidents = [item for item in await incident_repo.get_recent(500) if _is_today_local(item["created_at"])]
+    dispatches = [item for item in await dispatch_repo.get_history(500) if _is_today_local(item["created_at"])]
+    notifications = [item for item in await notification_repo.get_recent(500) if _is_today_local(item["created_at"])]
 
     ai_eta_values = [float(item["eta_minutes"]) for item in dispatches]
     baseline_values = [

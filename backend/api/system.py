@@ -14,7 +14,7 @@ except ModuleNotFoundError:
 from services.analytics_service import broadcast_score_update, build_analytics_snapshot
 from services.dispatch_service import full_dispatch_pipeline
 from simulation.incident_sim import build_incident_payload, create_incident
-from core.response import unwrap_envelope
+from core.response import success, unwrap_envelope
 
 router = APIRouter(tags=["system"])
 
@@ -77,13 +77,13 @@ async def trigger_scenario(
     from api.websocket import broadcast_event
 
     await broadcast_event({"type": "scenario_triggered", **body})
-    return body
+    return success(body, message="Scenario triggered")
 
 
-@router.get("/analytics")
-async def get_analytics() -> dict[str, float | int]:
+@router.get("/analytics", response_model=None)
+async def get_analytics() -> dict[str, object]:
     """Return derived analytics for the current local day."""
 
     analytics = await build_analytics_snapshot()
     await broadcast_score_update(analytics)
-    return analytics
+    return success(analytics)

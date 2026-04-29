@@ -7,6 +7,11 @@ import logging
 import re
 from typing import Any
 
+try:
+    from core.config import settings
+except ModuleNotFoundError:
+    from backend.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 LANGUAGE_MODEL_MAP: dict[str, str] = {
@@ -115,6 +120,16 @@ def _translate_hinglish_phrase(text: str) -> str | None:
 
 async def translate_to_english(text: str, language_code: str) -> dict[str, Any]:
     """Translate supported complaint text to English using offline models."""
+
+    if not settings.ENABLE_TRANSLATION:
+        return {
+            "translated_text": text,
+            "original_text": text,
+            "was_translated": False,
+            "model_used": None,
+            "language_code": language_code,
+            "translation_note": "Offline translation disabled by configuration.",
+        }
 
     if language_code == "en":
         return {

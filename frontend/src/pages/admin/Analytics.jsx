@@ -248,11 +248,29 @@ function FairnessTooltip({ active, payload, label }) {
         {payload.map((item) => (
           <div key={item.dataKey} className="flex items-center gap-2 text-slate-300">
             <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: item.fill }}
+              className={`h-2.5 w-2.5 rounded-full ${
+                item.dataKey === 'ai' ? 'bg-blue-500' : 'bg-amber-500'
+              }`}
             />
             <span>{item.name}: {Number(item.value || 0).toFixed(1)} min</span>
           </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 shadow-xl shadow-black/20">
+      {label ? <p className="mb-2 font-medium text-white">{label}</p> : null}
+      <div className="space-y-1">
+        {payload.map((item) => (
+          <p key={item.dataKey} className="text-slate-300">
+            {item.name || item.dataKey}: {Number(item.value || 0).toFixed(1)}
+          </p>
         ))}
       </div>
     </div>
@@ -447,20 +465,13 @@ function BenchmarkChart({ results }) {
     <div className="h-[220px]">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} barGap={8}>
-          <CartesianGrid stroke="#334155" strokeDasharray="3 3"/>
-          <XAxis dataKey="bucket" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false}/>
-          <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false}/>
-          <Tooltip
-            contentStyle={{
-              background: '#1e293b',
-              border: '1px solid #334155',
-              borderRadius: '8px',
-              color: '#f1f5f9',
-            }}
-          />
-          <Bar dataKey="ai" name="AI Dispatch" fill="#34d399" radius={[6, 6, 0, 0]}/>
-          <Bar dataKey="nearest" name="Nearest Unit" fill="#f59e0b" radius={[6, 6, 0, 0]}/>
-          <Bar dataKey="random" name="Random" fill="#ef4444" radius={[6, 6, 0, 0]}/>
+          <CartesianGrid stroke="rgb(51 65 85)" strokeDasharray="3 3"/>
+          <XAxis dataKey="bucket" tick={{ fill: 'rgb(148 163 184)', fontSize: 12 }} axisLine={false} tickLine={false}/>
+          <YAxis tick={{ fill: 'rgb(148 163 184)', fontSize: 12 }} axisLine={false} tickLine={false}/>
+          <Tooltip content={<ChartTooltip />} />
+          <Bar dataKey="ai" name="AI Dispatch" fill="rgb(52 211 153)" radius={[6, 6, 0, 0]}/>
+          <Bar dataKey="nearest" name="Nearest Unit" fill="rgb(245 158 11)" radius={[6, 6, 0, 0]}/>
+          <Bar dataKey="random" name="Random" fill="rgb(239 68 68)" radius={[6, 6, 0, 0]}/>
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -555,24 +566,24 @@ function FairnessSection({ fairness }) {
           <div className="h-[240px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} barGap={8}>
-                <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
-                <XAxis dataKey="zone" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <CartesianGrid stroke="rgb(51 65 85)" strokeDasharray="3 3" />
+                <XAxis dataKey="zone" tick={{ fill: 'rgb(148 163 184)', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
+                  tick={{ fill: 'rgb(148 163 184)', fontSize: 12 }}
                   axisLine={false}
                   tickLine={false}
                   label={{
                     value: 'Avg ETA (min)',
                     angle: -90,
                     position: 'insideLeft',
-                    fill: '#94a3b8',
+                    fill: 'rgb(148 163 184)',
                     fontSize: 12,
                   }}
                 />
                 <Tooltip content={<FairnessTooltip />} />
-                <ReferenceLine y={centralEta} stroke="#94a3b8" strokeDasharray="4 4" />
-                <Bar dataKey="ai" name="AI Dispatch" fill="#3b82f6" radius={[4, 4, 0, 0]} opacity={0.85} />
-                <Bar dataKey="nearest" name="Nearest Unit" fill="#f59e0b" radius={[4, 4, 0, 0]} opacity={0.85} />
+                <ReferenceLine y={centralEta} stroke="rgb(148 163 184)" strokeDasharray="4 4" />
+                <Bar dataKey="ai" name="AI Dispatch" fill="rgb(59 130 246)" radius={[4, 4, 0, 0]} opacity={0.85} />
+                <Bar dataKey="nearest" name="Nearest Unit" fill="rgb(245 158 11)" radius={[4, 4, 0, 0]} opacity={0.85} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -838,20 +849,13 @@ export default function Analytics() {
 
           <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={chartData}>
-              <CartesianGrid stroke="#334155" strokeDasharray="3 3"/>
-              <XAxis dataKey="name" tick={{ fill: '#94a3b8' }} axisLine={false} tickLine={false}/>
-              <YAxis tick={{ fill: '#94a3b8' }} axisLine={false} tickLine={false}/>
-              <Tooltip
-                contentStyle={{
-                  background: '#1e293b',
-                  border: '1px solid #334155',
-                  borderRadius: '8px',
-                  color: '#f1f5f9',
-                }}
-              />
-              <ReferenceLine y={Number(values.avg_eta_ai || 0)} stroke="#10b981" strokeDasharray="4 4"/>
-              <Bar dataKey="ai" fill="#3b82f6" radius={[8, 8, 0, 0]}/>
-              <Bar dataKey="baseline" fill="#475569" radius={[8, 8, 0, 0]}/>
+              <CartesianGrid stroke="rgb(51 65 85)" strokeDasharray="3 3"/>
+              <XAxis dataKey="name" tick={{ fill: 'rgb(148 163 184)' }} axisLine={false} tickLine={false}/>
+              <YAxis tick={{ fill: 'rgb(148 163 184)' }} axisLine={false} tickLine={false}/>
+              <Tooltip content={<ChartTooltip />} />
+              <ReferenceLine y={Number(values.avg_eta_ai || 0)} stroke="rgb(16 185 129)" strokeDasharray="4 4"/>
+              <Bar dataKey="ai" fill="rgb(59 130 246)" radius={[8, 8, 0, 0]}/>
+              <Bar dataKey="baseline" fill="rgb(71 85 105)" radius={[8, 8, 0, 0]}/>
             </BarChart>
           </ResponsiveContainer>
         </Card>

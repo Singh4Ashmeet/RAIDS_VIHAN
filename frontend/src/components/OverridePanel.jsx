@@ -11,6 +11,7 @@ import useDispatchStore from '../store/dispatchStore'
 import Badge from './ui/Badge'
 import Button from './ui/Button'
 import Card from './ui/Card'
+import ProgressBar from './ui/ProgressBar'
 import Skeleton from './ui/Skeleton'
 import StatusDot from './ui/StatusDot'
 
@@ -22,15 +23,6 @@ const REASON_CATEGORIES = [
   ['resource_conflict', 'Resource Conflict'],
   ['other', 'Other'],
 ]
-
-function ProgressBar({ value, max = 1, className = 'bg-brand-500' }) {
-  const percent = Math.min(100, Math.max(0, (Number(value || 0) / max) * 100))
-  return (
-    <div className="h-1 w-[60px] rounded-full bg-slate-800">
-      <div className={clsx('h-1 rounded-full', className)} style={{ width: `${percent}%` }} />
-    </div>
-  )
-}
 
 function resetLocalState(setters) {
   setters.setSelectedAmb(null)

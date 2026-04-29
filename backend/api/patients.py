@@ -7,7 +7,9 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from core.config import isoformat_utc
-from repositories.database import fetch_one, insert_record
+from repositories.ambulance_repo import AmbulanceRepository
+from repositories.hospital_repo import HospitalRepository
+from repositories.patient_repo import PatientRepository
 from models.patient import Patient, PatientCreate, PatientDetailResponse
 from services.dispatch_service import full_dispatch_pipeline
 from services.geo_service import nearest_city
@@ -60,7 +62,8 @@ async def create_patient(
             "assigned_hospital_id": None,
             "status": "waiting",
         }
-        await insert_record("patients", patient_payload)
+        patient_repo = PatientRepository()
+        await patient_repo.create(patient_payload)
         incident_payload = build_incident_payload(
             city=city,
             incident_type=str(triage["incident_type"]),
@@ -101,7 +104,7 @@ async def create_patient(
         if isinstance(dispatch_result, JSONResponse):
             return dispatch_result
 
-        patient_record = await fetch_one("patients", str(patient_payload["id"]))
+        patient_record = await patient_repo.get_by_id(str(patient_payload["id"]))
         if patient_record is None:
             return error("Created patient could not be reloaded.", code=500)
 
@@ -132,17 +135,18 @@ async def create_patient(
         return error(str(exc), code=500)
 
 
-@router.get("/{patient_id}", response_model=PatientDetailResponse)
-async def get_patient(patient_id: str) -> PatientDetailResponse:
+@router.get("/{patient_id}", response_model=None)
+async def get_patient(patient_id: str) -> dict[str, object]:
     """Return a patient together with assigned ambulance and hospital details."""
 
-    patient = await fetch_one("patients", patient_id)
+    patient = await PatientRepository().get_by_id(patient_id)
     if patient is None:
         raise HTTPException(status_code=404, detail="Patient not found.")
-    ambulance = await fetch_one("ambulances", patient["assigned_ambulance_id"]) if patient.get("assigned_ambulance_id") else None
-    hospital = await fetch_one("hospitals", patient["assigned_hospital_id"]) if patient.get("assigned_hospital_id") else None
-    return PatientDetailResponse(
+    ambulance = await AmbulanceRepository().get_by_id(patient["assigned_ambulance_id"]) if patient.get("assigned_ambulance_id") else None
+    hospital = await HospitalRepository().get_by_id(patient["assigned_hospital_id"]) if patient.get("assigned_hospital_id") else None
+    payload = PatientDetailResponse(
         patient=Patient.model_validate(patient),
         assigned_ambulance=ambulance,
         assigned_hospital=hospital,
-    )
+    ).model_dump(mode="json")
+    return success(payload)

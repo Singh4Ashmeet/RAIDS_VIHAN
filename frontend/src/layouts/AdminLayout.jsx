@@ -35,9 +35,7 @@ const STATUS_CONFIG = {
 
 export default function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem('raid_sidebar') === '1'
-  )
+  const [collapsed, setCollapsed] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const logout = useAuthStore((s) => s.logout)
@@ -46,11 +44,7 @@ export default function AdminLayout() {
   const systemStatus = useDispatchStore((s) => s.systemStatus)
   const trafficMultiplier = useDispatchStore((s) => s.trafficMultiplier)
 
-  const toggleCollapse = () => setCollapsed((c) => {
-    const next = !c
-    localStorage.setItem('raid_sidebar', next ? '1' : '0')
-    return next
-  })
+  const toggleCollapse = () => setCollapsed((c) => !c)
   const handleLogout = () => {
     logout()
     navigate('/login')

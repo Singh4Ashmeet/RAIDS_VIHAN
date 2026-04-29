@@ -9,7 +9,11 @@ from uuid import uuid4
 
 from agents.graph import run_dispatch_pipeline as _graph_run
 from core.config import isoformat_utc
-from repositories.database import fetch_all, fetch_one, insert_record, update_record
+from repositories.ambulance_repo import AmbulanceRepository
+from repositories.dispatch_repo import DispatchRepository
+from repositories.hospital_repo import HospitalRepository
+from repositories.incident_repo import IncidentRepository
+from repositories.patient_repo import PatientRepository
 from services.analytics_service import build_analytics_snapshot, broadcast_score_update
 from services.audit_service import log_ai_dispatch
 from services.dispatch import select_dispatch
@@ -70,19 +74,23 @@ async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None
     """Run the complete dispatch lifecycle for an incident."""
 
     try:
-        graph_plan: dict[str, Any] | None = None
-
         if USE_GRAPH_PIPELINE:
             try:
-                graph_plan = await _graph_run(incident_id, patient_id)
+                await _graph_run(incident_id, patient_id)
             except Exception as e:
                 print(f"[RAID] Graph pipeline failed, using persisted pipeline: {e}")
 
-        incident = await fetch_one("incidents", incident_id)
+        incident_repo = IncidentRepository()
+        patient_repo = PatientRepository()
+        ambulance_repo = AmbulanceRepository()
+        hospital_repo = HospitalRepository()
+        dispatch_repo = DispatchRepository()
+
+        incident = await incident_repo.get_by_id(incident_id)
         if incident is None:
             raise ValueError(f"Incident {incident_id} was not found.")
 
-        patient = await fetch_one("patients", patient_id) if patient_id else None
+        patient = await patient_repo.get_by_id(patient_id) if patient_id else None
         triage_source = patient["chief_complaint"] if patient else incident["description"]
         triage = await triage_incident(
             triage_source,
@@ -107,28 +115,28 @@ async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None
         translated_text = triage.get("translation", {}).get("translated_text")
         if translated_text:
             incident_updates["description"] = translated_text
-        await update_record("incidents", incident_id, incident_updates)
-        incident.update(incident_updates)
+        for key, value in incident_updates.items():
+            incident[key] = value
+        await incident_repo.update(incident_id, incident_updates)
 
         if patient is not None:
             patient_updates = {"severity": triage["severity"], "status": "waiting"}
-            await update_record("patients", patient_id, patient_updates)
+            await patient_repo.update(patient_id, patient_updates)
             patient.update(patient_updates)
 
-        ambulances = await fetch_all("ambulances")
-        hospitals = await fetch_all("hospitals")
+        ambulances = await ambulance_repo.get_all()
+        hospitals = await hospital_repo.get_all()
         selection = await select_dispatch(incident, ambulances, hospitals)
         if selection["status"] == "error":
             return error(selection["explanation_text"], code=500)
 
-        ambulance = await fetch_one("ambulances", selection["ambulance_id"])
-        hospital = await fetch_one("hospitals", selection["hospital_id"])
+        ambulance = await ambulance_repo.get_by_id(selection["ambulance_id"])
+        hospital = await hospital_repo.get_by_id(selection["hospital_id"])
         if ambulance is None or hospital is None:
             raise ValueError("Selected dispatch targets could not be reloaded.")
         traffic_multiplier, traffic_city = await _dispatch_traffic_context(incident, hospital)
 
-        await update_record(
-            "ambulances",
+        await ambulance_repo.update(
             ambulance["id"],
             {
                 "status": "en_route",
@@ -140,24 +148,10 @@ async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None
         patient_token = patient_id or incident_id
         if patient_token not in incoming_patients:
             incoming_patients.append(patient_token)
-        await update_record(
-            "hospitals",
-            hospital["id"],
-            {
-                "incoming_patients": incoming_patients,
-            },
-        )
-        await update_record(
-            "incidents",
-            incident_id,
-            {
-                "status": "dispatched",
-                "patient_id": patient_id,
-            },
-        )
+        await hospital_repo.update(hospital["id"], {"incoming_patients": incoming_patients})
+        await incident_repo.update(incident_id, {"status": "dispatched", "patient_id": patient_id})
         if patient is not None:
-            await update_record(
-                "patients",
+            await patient_repo.update(
                 patient_id,
                 {
                     "assigned_ambulance_id": ambulance["id"],
@@ -166,7 +160,7 @@ async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None
                     "severity": triage["severity"],
                 },
             )
-            patient = await fetch_one("patients", patient_id)
+            patient = await patient_repo.get_by_id(patient_id)
 
         score_breakdown = selection.get("score_breakdown") or {}
         components = score_breakdown.get("components", {})
@@ -220,8 +214,7 @@ async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None
         if patient is not None:
             await notify_hospital(hospital["id"], patient, dispatch_plan, ambulance)
 
-        await insert_record(
-            "dispatch_plans",
+        await dispatch_repo.create(
             {
                 "id": dispatch_plan["id"],
                 "incident_id": dispatch_plan["incident_id"],

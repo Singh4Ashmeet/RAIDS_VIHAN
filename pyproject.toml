@@ -1,0 +1,4 @@
+[tool.ruff.lint.per-file-ignores]
+"backend/scripts/*.py" = ["E402"]
+"backend/ml/synthetic_generator.py" = ["E402"]
+"backend/ml/train.py" = ["E401", "E702"]

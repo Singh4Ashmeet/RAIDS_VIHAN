@@ -17,6 +17,7 @@ import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import ErrorState from '../../components/ui/ErrorState'
+import ProgressBar from '../../components/ui/ProgressBar'
 import Skeleton from '../../components/ui/Skeleton'
 
 const CITIES = ['Delhi', 'Mumbai', 'Bengaluru', 'Chennai', 'Hyderabad']
@@ -31,6 +32,14 @@ function getDemandBand(score) {
   if (score >= 0.75) return DEMAND_BANDS[2]
   if (score >= 0.45) return DEMAND_BANDS[1]
   return DEMAND_BANDS[0]
+}
+
+function demandCellClass(score) {
+  if (score <= 0) return 'bg-slate-700/20'
+  const opacity = score >= 0.8 ? 'opacity-100' : score >= 0.6 ? 'opacity-80' : score >= 0.35 ? 'opacity-60' : 'opacity-40'
+  if (score > 0.75) return `bg-red-400 ${opacity}`
+  if (score > 0.45) return `bg-amber-400 ${opacity}`
+  return `bg-emerald-400 ${opacity}`
 }
 
 function formatPercent(value) {
@@ -73,17 +82,9 @@ function HeatmapCanvas({ hotspots, selectedHotspot, onSelectHotspot }) {
           West
         </div>
         <div
-          className="mx-auto grid aspect-square w-full max-w-[640px] gap-0.5 rounded-lg border border-slate-700/70 bg-slate-950/50 p-1"
-          style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))` }}
+          className="mx-auto grid aspect-square w-full max-w-[640px] grid-cols-[repeat(20,minmax(0,1fr))] gap-0.5 rounded-lg border border-slate-700/70 bg-slate-950/50 p-1"
         >
           {cells.map((cell) => {
-            const alpha = Math.min(0.95, 0.16 + cell.score * 0.78)
-            const color = cell.score > 0.75
-              ? '239,68,68'
-              : cell.score > 0.45
-                ? '245,158,11'
-                : '16,185,129'
-            const background = cell.score > 0 ? `rgba(${color},${alpha})` : 'rgba(51,65,85,0.2)'
             const isSelected = selectedHotspot
               && selectedHotspot.cell_row === cell.row
               && selectedHotspot.cell_col === cell.col
@@ -93,10 +94,9 @@ function HeatmapCanvas({ hotspots, selectedHotspot, onSelectHotspot }) {
                 type="button"
                 onClick={() => cell.hotspot && onSelectHotspot(cell.hotspot)}
                 title={cell.hotspot ? `Cell ${cell.row}, ${cell.col}: demand ${formatPercent(cell.score)}` : 'No active demand'}
-                className={`rounded-[3px] transition focus:outline-none focus:ring-2 focus:ring-sky-300 ${
+                className={`rounded-[3px] transition focus:outline-none focus:ring-2 focus:ring-sky-300 ${demandCellClass(cell.score)} ${
                   cell.hotspot ? 'cursor-pointer hover:scale-125 hover:ring-1 hover:ring-white/70' : 'cursor-default'
                 } ${isSelected ? 'scale-125 ring-2 ring-white shadow-lg shadow-white/20' : ''}`}
-                style={{ background }}
                 aria-label={cell.hotspot ? `Demand cell ${cell.row}, ${cell.col}, ${formatPercent(cell.score)}` : `Empty cell ${cell.row}, ${cell.col}`}
               />
             )
@@ -330,10 +330,12 @@ export default function DemandHeatmap() {
                       {selectedBand.label}
                     </Badge>
                   </div>
-                  <div className="mt-4 h-2 rounded-full bg-slate-700">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-amber-400 to-red-400"
-                      style={{ width: formatPercent(selectedHotspot.demand_score) }}
+                  <div className="mt-4">
+                    <ProgressBar
+                      value={selectedHotspot.demand_score}
+                      max={1}
+                      className="bg-gradient-to-r from-emerald-400 via-amber-400 to-red-400"
+                      trackClassName="bg-slate-700"
                     />
                   </div>
                   <div className="mt-3 flex items-center justify-between text-sm">

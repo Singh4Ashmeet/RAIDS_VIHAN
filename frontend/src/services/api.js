@@ -37,7 +37,7 @@ function formatApiError(value, fallback = 'Request failed') {
 }
 
 api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token || localStorage.getItem('raid_token')
+  const token = useAuthStore.getState().token
   if (token) {
     config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${token}`
@@ -59,7 +59,7 @@ api.interceptors.response.use(
 )
 
 async function request(path, options = {}) {
-  const token = useAuthStore.getState().token || localStorage.getItem('raid_token')
+  const token = useAuthStore.getState().token
   const normalizedPath = path.startsWith('/api/')
     ? path.slice(4)
     : path

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Final
 from zoneinfo import ZoneInfo
 
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data"
@@ -17,42 +17,62 @@ DB_PATH_ENV_VAR = "RAID_NEXUS_DB_PATH"
 DATABASE_URL_ENV_VAR = "DATABASE_URL"
 POSTGRES_URL_ENV_VAR = "POSTGRES_URL"
 TRAINING_DATA_PATH_ENV_VAR = "RAID_NEXUS_TRAINING_DATA_PATH"
-
 ENV_FILE = ROOT_DIR / ".env"
-_ENV_EXISTS = ENV_FILE.is_file()
-if _ENV_EXISTS:
-    load_dotenv(ENV_FILE)
-
-_DEV_AUTH_DEFAULTS: Final[dict[str, str]] = {
-    "SECRET_KEY": "change-this-to-a-random-64-char-string-in-production",
-    "ACCESS_TOKEN_EXPIRE_MINUTES": "480",
-    "ALGORITHM": "HS256",
-    "ADMIN_USERNAME": "admin",
-    "ADMIN_PASSWORD": "admin123",
-    "USER_USERNAME": "user",
-    "USER_PASSWORD": "user123",
-}
-
-if not _ENV_EXISTS and any(os.getenv(key) is None for key in _DEV_AUTH_DEFAULTS):
-    print("WARNING: Using default credentials. Set environment variables for production.")
 
 
-def _auth_setting(name: str, *, required: bool = False) -> str:
-    value = os.getenv(name)
-    if value is None and not _ENV_EXISTS:
-        value = _DEV_AUTH_DEFAULTS.get(name)
-    if required and not value:
-        raise ValueError(f"{name} must be set in backend/.env or environment variables.")
-    return str(value or _DEV_AUTH_DEFAULTS.get(name, ""))
+class Settings(BaseSettings):
+    """Environment-backed settings used by backend services."""
+
+    DATABASE_URL: str = "sqlite:///./raid_nexus.db"
+    POSTGRES_URL: str = ""
+    ENVIRONMENT: str = "development"
+
+    SECRET_KEY: str = "dev-secret-change-in-production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123"
+    USER_USERNAME: str = "user"
+    USER_PASSWORD: str = "user123"
+
+    TOMTOM_API_KEY: str = ""
+    OSRM_URL: str = "http://router.project-osrm.org"
+
+    BACKEND_PORT: int = 8000
+    FRONTEND_PORT: int = 3000
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://raid-nexus.onrender.com",
+    ]
+
+    ENABLE_NLP_TRIAGE: bool = True
+    ENABLE_TRANSLATION: bool = True
+    ENABLE_ANOMALY_DETECTION: bool = True
+
+    RAID_NEXUS_DB_PATH: str = str(DEFAULT_DB_PATH)
+    RAID_NEXUS_TRAINING_DATA_PATH: str = ""
+    RAID_FORCE_SQLITE: bool = False
+    RAID_DISABLE_SIMULATION: bool = False
+    RAID_LIGHTWEIGHT_TRIAGE: bool = False
+
+    model_config = SettingsConfigDict(
+        env_file=str(ENV_FILE),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
-SECRET_KEY: Final[str] = _auth_setting("SECRET_KEY", required=True)
-ALGORITHM: Final[str] = _auth_setting("ALGORITHM") or "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = int(_auth_setting("ACCESS_TOKEN_EXPIRE_MINUTES") or "480")
-ADMIN_USERNAME: Final[str] = _auth_setting("ADMIN_USERNAME") or "admin"
-ADMIN_PASSWORD: Final[str] = _auth_setting("ADMIN_PASSWORD") or "admin123"
-USER_USERNAME: Final[str] = _auth_setting("USER_USERNAME") or "user"
-USER_PASSWORD: Final[str] = _auth_setting("USER_PASSWORD") or "user123"
+settings = Settings()
+
+SECRET_KEY: Final[str] = settings.SECRET_KEY
+ALGORITHM: Final[str] = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+ADMIN_USERNAME: Final[str] = settings.ADMIN_USERNAME
+ADMIN_PASSWORD: Final[str] = settings.ADMIN_PASSWORD
+USER_USERNAME: Final[str] = settings.USER_USERNAME
+USER_PASSWORD: Final[str] = settings.USER_PASSWORD
 
 UTC = timezone.utc
 KOLKATA_TZ = ZoneInfo("Asia/Kolkata")
@@ -135,13 +155,18 @@ ANALYTICS_OVERLOAD_THRESHOLD = 90.0
 def get_db_path() -> Path:
     """Return the active SQLite database path, honoring test/runtime overrides."""
 
-    return Path(os.getenv(DB_PATH_ENV_VAR, str(DEFAULT_DB_PATH))).expanduser()
+    return Path(os.getenv(DB_PATH_ENV_VAR, settings.RAID_NEXUS_DB_PATH or str(DEFAULT_DB_PATH))).expanduser()
 
 
 def get_database_url() -> str | None:
-    """Return the configured PostgreSQL URL, if one is available."""
+    """Return the configured database URL."""
 
-    return os.getenv(DATABASE_URL_ENV_VAR) or os.getenv(POSTGRES_URL_ENV_VAR)
+    return (
+        os.getenv(POSTGRES_URL_ENV_VAR)
+        or os.getenv(DATABASE_URL_ENV_VAR)
+        or settings.POSTGRES_URL
+        or settings.DATABASE_URL
+    )
 
 
 def utc_now() -> datetime:

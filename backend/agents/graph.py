@@ -7,7 +7,6 @@ from langgraph.graph import END, StateGraph
 
 from repositories.database import fetch_all, fetch_one
 from services.geo_service import get_active_traffic_multiplier, score_route
-from services.notification_service import notify_hospital as send_hospital_alert
 from services.scoring_service import (
     evaluate_ambulance,
     evaluate_hospital,
@@ -213,7 +212,7 @@ def build_dispatch_graph():
 dispatch_graph = build_dispatch_graph()
 
 
-async def run_dispatch_pipeline(incident_id: str, patient_id: str = None):
+async def run_dispatch_pipeline(incident_id: str, patient_id: Optional[str] = None):
     initial_state: DispatchState = {
         "incident_id": incident_id,
         "patient_id": patient_id,

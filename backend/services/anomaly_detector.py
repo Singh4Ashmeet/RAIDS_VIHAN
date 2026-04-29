@@ -10,6 +10,11 @@ from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Any
 
+try:
+    from core.config import settings
+except ModuleNotFoundError:
+    from backend.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 recent_incidents: deque[dict[str, Any]] = deque(maxlen=200)
@@ -165,6 +170,9 @@ def check_rapid_submitter(
 
 async def analyze_incident(incident: dict[str, Any], submitter_ip: str) -> list[dict[str, Any]]:
     """Run all anomaly checks and record any detections."""
+
+    if not settings.ENABLE_ANOMALY_DETECTION:
+        return []
 
     results = await asyncio.gather(
         asyncio.to_thread(check_geographic_cluster, incident),

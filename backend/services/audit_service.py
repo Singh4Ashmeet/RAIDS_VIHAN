@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from core.config import isoformat_utc, utc_now
-from repositories.database import fetch_all, fetch_one, insert_record
+from repositories.audit_repo import AuditRepository
+from repositories.dispatch_repo import DispatchRepository
+from repositories.incident_repo import IncidentRepository
 
 
 def _incident_context(incident: dict[str, Any] | None) -> dict[str, Any]:
@@ -83,7 +85,7 @@ async def log_ai_dispatch(dispatch_plan: dict, incident: dict, actor_id: str) ->
         final_eta_minutes=float(dispatch_plan["eta_minutes"]),
         metadata=metadata,
     )
-    await insert_record("dispatch_audit_log", payload)
+    await AuditRepository().create(payload)
     return str(payload["id"])
 
 
@@ -96,11 +98,11 @@ async def log_human_override(
 ) -> str:
     """Write an audit row for an approved human override and return its id."""
 
-    original_dispatch = original_dispatch or await fetch_one("dispatch_plans", dispatch_id)
+    original_dispatch = original_dispatch or await DispatchRepository().get_by_id(dispatch_id)
     if original_dispatch is None:
         raise ValueError(f"Dispatch plan {dispatch_id} was not found.")
 
-    incident = await fetch_one("incidents", str(original_dispatch["incident_id"]))
+    incident = await IncidentRepository().get_by_id(str(original_dispatch["incident_id"]))
     payload = _base_audit_payload(
         event_type="human_override",
         dispatch_plan=original_dispatch,
@@ -119,7 +121,7 @@ async def log_human_override(
             "override_hospital_id": override_request.get("proposed_hospital_id"),
         }
     )
-    await insert_record("dispatch_audit_log", payload)
+    await AuditRepository().create(payload)
     return str(payload["id"])
 
 
@@ -137,18 +139,14 @@ async def log_fallback(dispatch_plan: dict, incident: dict) -> str:
         final_eta_minutes=float(dispatch_plan["eta_minutes"]),
         metadata={"score_breakdown": dispatch_plan.get("score_breakdown") or {}},
     )
-    await insert_record("dispatch_audit_log", payload)
+    await AuditRepository().create(payload)
     return str(payload["id"])
 
 
 async def get_audit_trail(dispatch_id: str) -> list[dict]:
     """Return audit entries for one dispatch, ordered from oldest to newest."""
 
-    return await fetch_all(
-        "dispatch_audit_log",
-        where_clause="dispatch_id = ?",
-        params=(dispatch_id,),
-    )
+    return await AuditRepository().get_trail(dispatch_id)
 
 
 def _avg(values: list[float]) -> float:
@@ -157,21 +155,11 @@ def _avg(values: list[float]) -> float:
     return round(sum(values) / len(values), 2)
 
 
-async def get_override_stats(city: str = None, days: int = 7) -> dict:
+async def get_override_stats(city: Optional[str] = None, days: int = 7) -> dict:
     """Return aggregate override metrics for a recent audit window."""
 
     cutoff = isoformat_utc(utc_now() - timedelta(days=max(days, 0)))
-    where_parts = ["created_at >= ?"]
-    params: list[Any] = [cutoff]
-    if city:
-        where_parts.append("incident_city = ?")
-        params.append(city)
-
-    rows = await fetch_all(
-        "dispatch_audit_log",
-        where_clause=" AND ".join(where_parts),
-        params=tuple(params),
-    )
+    rows = await AuditRepository().get_recent(cutoff, city=city)
 
     dispatch_events = [
         row

@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from repositories.database import fetch_all
 from models.incident import Incident, IncidentCreate
+from repositories.incident_repo import IncidentRepository
 from services.dispatch_service import full_dispatch_pipeline
 from simulation.incident_sim import build_incident_payload, create_incident
 from core.response import fallback, success, unwrap_envelope
@@ -102,8 +102,12 @@ async def list_incidents(status_filter: str | None = Query(default=None, alias="
     """List incidents, optionally filtered by status."""
 
     if status_filter:
-        incidents = await fetch_all("incidents", where_clause="status = ?", params=(status_filter,))
+        incidents = [
+            incident
+            for incident in await IncidentRepository().get_recent(500)
+            if incident.get("status") == status_filter
+        ]
     else:
-        incidents = await fetch_all("incidents")
+        incidents = await IncidentRepository().get_recent(500)
     payload = [Incident.model_validate(item).model_dump(mode="json") for item in incidents]
     return success(payload)

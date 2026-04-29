@@ -5,6 +5,7 @@ import { Play } from 'lucide-react'
 
 import Button from '../ui/Button'
 import Card from '../ui/Card'
+import ProgressBar from '../ui/ProgressBar'
 import { triggerScenario } from '../../services/api'
 import useDispatchStore from '../../store/dispatchStore'
 
@@ -250,10 +251,11 @@ export default function ScenarioCard({
         </div>
 
         {ttlSeconds != null && status === 'running' ? (
-          <div className="h-1 w-full rounded-full bg-slate-800 overflow-hidden mt-3">
-            <div
-              className={clsx('h-full rounded-full transition-none', accent.solidBg)}
-              style={{ width: `${progress}%` }}
+          <div className="mt-3">
+            <ProgressBar
+              value={progress}
+              className={clsx('transition-none', accent.solidBg)}
+              size="sm"
             />
           </div>
         ) : null}

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "preview": "vite preview",
     "test": "vitest --configLoader runner --pool threads run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest"

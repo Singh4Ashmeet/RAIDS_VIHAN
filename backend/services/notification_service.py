@@ -6,7 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from core.config import isoformat_utc
-from repositories.database import insert_record
+from repositories.notification_repo import NotificationRepository
 from services.nlp_triage import triage_incident
 
 PREP_CHECKLISTS: dict[str, list[str]] = {
@@ -68,8 +68,7 @@ async def notify_hospital(
         "prep_checklist": await _prep_checklist(patient["chief_complaint"]),
         "timestamp": timestamp,
     }
-    await insert_record(
-        "notifications",
+    await NotificationRepository().create(
         {
             "id": str(uuid4()),
             "hospital_id": hospital_id,
