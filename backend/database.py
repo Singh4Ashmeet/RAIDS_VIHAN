@@ -7,6 +7,7 @@ import json
 import re
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
 import aiosqlite
@@ -29,21 +30,62 @@ from models.orm import Base
 
 _PWD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
 def _normalize_async_database_url(database_url: str | None) -> str | None:
     """Return a SQLAlchemy async URL for PostgreSQL connection strings."""
 
     if not database_url:
         return database_url
     if database_url.startswith("postgres://"):
-        return database_url.replace("postgres://", "postgresql+asyncpg://", 1)
-    if database_url.startswith("postgresql://"):
-        return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    if database_url.startswith("postgresql+psycopg2://"):
-        return database_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
-    return database_url
+        database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif database_url.startswith("postgresql+psycopg2://"):
+        database_url = database_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+
+    parsed = urlsplit(database_url)
+    if parsed.scheme != "postgresql+asyncpg":
+        return database_url
+
+    query_params = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key.lower() != "sslmode"
+    ]
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query_params, doseq=True),
+            parsed.fragment,
+        )
+    )
 
 
-DATABASE_URL = _normalize_async_database_url(get_database_url())
+def _database_sslmode(database_url: str | None) -> str | None:
+    """Extract libpq sslmode from a database URL query string."""
+
+    if not database_url:
+        return None
+
+    for key, value in parse_qsl(urlsplit(database_url).query, keep_blank_values=True):
+        if key.lower() == "sslmode":
+            return value.lower()
+    return None
+
+
+def _postgres_connect_args(database_url: str, sslmode: str | None) -> dict[str, Any]:
+    """Return asyncpg connect args for provider-specific PostgreSQL URLs."""
+
+    if sslmode in {"require", "verify-ca", "verify-full"} or "neon.tech" in database_url:
+        return {"ssl": "require"}
+    return {}
+
+
+RAW_DATABASE_URL = get_database_url()
+DATABASE_SSLMODE = _database_sslmode(RAW_DATABASE_URL)
+DATABASE_URL = _normalize_async_database_url(RAW_DATABASE_URL)
 IS_POSTGRES = bool(
     DATABASE_URL
     and DATABASE_URL.startswith(("postgresql", "postgres"))
@@ -60,7 +102,7 @@ if IS_POSTGRES:
         max_overflow=20,
         pool_pre_ping=True,
         pool_recycle=3600,
-        connect_args={"ssl": "require"} if "neon.tech" in str(DATABASE_URL) else {},
+        connect_args=_postgres_connect_args(str(DATABASE_URL), DATABASE_SSLMODE),
     )
     AsyncSessionLocal = async_sessionmaker(
         engine,
