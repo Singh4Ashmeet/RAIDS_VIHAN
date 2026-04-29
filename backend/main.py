@@ -72,6 +72,9 @@ FAVICON_SVG = (
 FRONTEND_DIST_DIR = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 FRONTEND_INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
 FRONTEND_RESERVED_PATHS = {"api", "docs", "health", "openapi.json", "redoc", "ws"}
+PUBLIC_FRONTEND_ORIGINS = (
+    "https://raids-vihan.vercel.app",
+)
 BENCHMARK_RESULTS_FILE = DATA_DIR / "benchmark_results.json"
 LITERATURE_COMPARISON_FILE = DATA_DIR / "literature_comparison.json"
 _BENCHMARK_CACHE: dict[str, object] = {}
@@ -508,6 +511,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """Build and configure the RAID Nexus FastAPI application."""
 
+    cors_origins = list(dict.fromkeys([*settings.CORS_ORIGINS, *PUBLIC_FRONTEND_ORIGINS]))
     application = FastAPI(
         title="RAID Nexus",
         version="0.1.0",
@@ -516,7 +520,7 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
+        allow_origins=cors_origins,
         allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
         allow_credentials=True,
         allow_methods=["*"],
