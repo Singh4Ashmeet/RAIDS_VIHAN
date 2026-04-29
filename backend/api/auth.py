@@ -11,10 +11,12 @@ from pydantic import BaseModel
 
 try:
     from core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+    from core.response import success
     from core.security import limiter
     from repositories.user_repo import UserRepository
 except ModuleNotFoundError:
     from backend.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+    from backend.core.response import success
     from backend.core.security import limiter
     from backend.repositories.user_repo import UserRepository
 
