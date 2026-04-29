@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from core.config import get_db_path
-from main import create_app
+from main import FRONTEND_INDEX_FILE, create_app
 from ml.synthetic_generator import generate_training_data, get_output_path
 from core.security import limiter
 
@@ -103,11 +103,16 @@ class RaidNexusSmokeTests(unittest.TestCase):
             health = client.get("/health")
             self.assertEqual(health.status_code, 200)
             self.assertEqual(health.json()["status"], "ok")
-            self.assertEqual(root.status_code, 200)
-            self.assertEqual(root.headers["content-type"], "text/html; charset=utf-8")
-            self.assertIn('<div id="root"></div>', root.text)
-            self.assertEqual(spa_route.status_code, 200)
-            self.assertEqual(spa_route.headers["content-type"], "text/html; charset=utf-8")
+            if FRONTEND_INDEX_FILE.is_file():
+                self.assertEqual(root.status_code, 200)
+                self.assertEqual(root.headers["content-type"], "text/html; charset=utf-8")
+                self.assertIn('<div id="root"></div>', root.text)
+                self.assertEqual(spa_route.status_code, 200)
+                self.assertEqual(spa_route.headers["content-type"], "text/html; charset=utf-8")
+            else:
+                self.assertEqual(root.status_code, 503)
+                self.assertIn("Frontend build not found", root.text)
+                self.assertEqual(spa_route.status_code, 503)
             self.assertEqual(docs.status_code, 200)
             self.assertEqual(favicon.status_code, 200)
             self.assertEqual(favicon.headers["content-type"], "image/svg+xml")
