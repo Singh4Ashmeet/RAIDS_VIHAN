@@ -594,6 +594,18 @@ async def _ensure_default_users() -> None:
             "role": "user",
             "full_name": "User",
         },
+        {
+            "username": "admin",
+            "password": "admin123",
+            "role": "admin",
+            "full_name": "Admin",
+        },
+        {
+            "username": "user",
+            "password": "user123",
+            "role": "user",
+            "full_name": "User",
+        },
     ]
     for default_user in default_users:
         existing_user = await fetch_one("users", default_user["username"], id_field="username")

@@ -1,9 +1,9 @@
 services:
   - type: web
     name: raid-nexus-backend
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: cd backend && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -12,9 +12,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: CORS_ORIGINS
-        value: '["https://raid-nexus.onrender.com","https://raids-vihan.vercel.app"]'
-      - key: CORS_ORIGIN_REGEX
-        value: 'https://.*\.(netlify\.app|vercel\.app)'
+        value: '["https://raid-nexus.onrender.com"]'
       - key: ENABLE_NLP_TRIAGE
         value: "false"
       - key: ENABLE_TRANSLATION
@@ -24,8 +22,8 @@ services:
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
-        sync: false
+        value: admin123
       - key: USER_USERNAME
         value: user
       - key: USER_PASSWORD
-        sync: false
+        value: user123
