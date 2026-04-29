@@ -11,12 +11,10 @@ from pydantic import BaseModel
 
 try:
     from core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
-    from core.response import success
     from core.security import limiter
     from repositories.user_repo import UserRepository
 except ModuleNotFoundError:
     from backend.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
-    from backend.core.response import success
     from backend.core.security import limiter
     from backend.repositories.user_repo import UserRepository
 
@@ -100,7 +98,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         role=str(user["role"]),
         username=str(user["username"]),
     )
-    return success(token.model_dump())
+    return token.model_dump()
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
