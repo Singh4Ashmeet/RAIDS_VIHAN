@@ -12,7 +12,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: CORS_ORIGINS
-        value: '["https://raid-nexus.onrender.com"]'
+        value: '["https://raid-nexus.onrender.com","https://raids-vihan.vercel.app"]'
       - key: CORS_ORIGIN_REGEX
         value: 'https://.*\.(netlify\.app|vercel\.app)'
       - key: ENABLE_NLP_TRIAGE
