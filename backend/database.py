@@ -29,10 +29,24 @@ from models.orm import Base
 
 _PWD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-DATABASE_URL = get_database_url()
+def _normalize_async_database_url(database_url: str | None) -> str | None:
+    """Return a SQLAlchemy async URL for PostgreSQL connection strings."""
+
+    if not database_url:
+        return database_url
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if database_url.startswith("postgresql+psycopg2://"):
+        return database_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+    return database_url
+
+
+DATABASE_URL = _normalize_async_database_url(get_database_url())
 IS_POSTGRES = bool(
     DATABASE_URL
-    and DATABASE_URL.startswith("postgresql")
+    and DATABASE_URL.startswith(("postgresql", "postgres"))
     and not settings.RAID_FORCE_SQLITE
 )
 
