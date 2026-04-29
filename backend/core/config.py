@@ -46,6 +46,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "https://raid-nexus.onrender.com",
     ]
+    CORS_ORIGIN_REGEX: str = r"https://.*\.(netlify\.app|vercel\.app)"
 
     ENABLE_NLP_TRIAGE: bool = True
     ENABLE_TRANSLATION: bool = True

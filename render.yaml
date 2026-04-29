@@ -13,6 +13,8 @@ services:
         value: production
       - key: CORS_ORIGINS
         value: '["https://raid-nexus.onrender.com"]'
+      - key: CORS_ORIGIN_REGEX
+        value: 'https://.*\.(netlify\.app|vercel\.app)'
       - key: ENABLE_NLP_TRIAGE
         value: "false"
       - key: ENABLE_TRANSLATION
@@ -27,9 +29,3 @@ services:
         value: user
       - key: USER_PASSWORD
         sync: false
-
-  - type: web
-    name: raid-nexus-frontend
-    runtime: node
-    buildCommand: cd frontend && npm install && npm run build
-    startCommand: cd frontend && npm run preview -- --host 0.0.0.0 --port $PORT
