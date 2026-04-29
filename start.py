@@ -67,7 +67,6 @@ API_ENDPOINTS = [
     ("Benchmark", "/api/benchmark", False),
     ("Demand Heatmap", "/api/demand/heatmap?city=Bengaluru&lookahead=30", True),
     ("Scenario Lab", "/api/simulate/scenario", False),
-    ("Live WebSocket", "/ws/live", False),
 ]
 
 
@@ -237,7 +236,8 @@ def admin_auth_headers(backend_url: str) -> dict[str, str] | None:
         )
         with urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        token = payload.get("access_token")
+        token_payload = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        token = token_payload.get("access_token")
         if token:
             return {"Authorization": f"Bearer {token}"}
     except Exception as exc:
@@ -261,7 +261,9 @@ def print_endpoint_map(backend_url: str, frontend_url: str) -> None:
     print(f"  {GREEN}Backend health:{RESET}     {backend_url}/health")
     print(f"  {GREEN}API docs:{RESET}           {backend_url}/docs")
     print(f"  {CYAN}Frontend:{RESET}           {frontend_url}")
-    print(f"  {CYAN}WebSocket:{RESET}          {backend_url.replace('http', 'ws', 1)}/ws/live")
+    print(f"  {CYAN}WebSocket:{RESET}          managed by the logged-in app")
+    print(f"  {CYAN}WebSocket endpoint:{RESET} {backend_url.replace('http', 'ws', 1)}/ws/live?token=<access_token>")
+    print(f"  {YELLOW}Note:{RESET} ws:// URLs cannot be opened as normal browser pages.")
 
     print(f"\n{BOLD}Admin portal{RESET}")
     for route in ADMIN_ROUTES:

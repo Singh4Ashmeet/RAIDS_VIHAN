@@ -74,6 +74,17 @@ async def _send_ping_messages(websocket: WebSocket) -> None:
         return
 
 
+@router.get("/ws/live", include_in_schema=False)
+async def live_feed_info() -> dict[str, Any]:
+    """Explain how to connect to the live WebSocket from a normal browser tab."""
+
+    return {
+        "status": "ok",
+        "message": "This is a WebSocket endpoint, not a normal web page.",
+        "connect": "Login at /api/auth/login, then connect to /ws/live?token=<access_token> using a WebSocket client.",
+    }
+
+
 @router.websocket("/ws/live")
 async def live_feed(websocket: WebSocket, token: str | None = Query(default=None)) -> None:
     """Stream state snapshots and live simulation events to authorized clients."""
