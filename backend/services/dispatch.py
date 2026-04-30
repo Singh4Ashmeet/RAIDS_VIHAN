@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 from typing import Any, Optional
 
+from services.geo_service import is_coordinate_in_city, same_city
 from services.routing import get_travel_time
 
 
@@ -39,6 +40,20 @@ _SPECIALTY_ALIASES: dict[str, str] = {
     "orthopedics": "orthopedics",
     "orthopaedics": "orthopedics",
 }
+
+MANUAL_ESCALATION_TEXT = "No feasible same-city dispatch available; manual mutual-aid escalation required."
+
+
+def _normalize_city(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _same_service_city(resource: dict[str, Any], service_city: str) -> bool:
+    if not service_city or not same_city(resource.get("city"), service_city):
+        return False
+    lat = resource.get("current_lat", resource.get("lat"))
+    lng = resource.get("current_lng", resource.get("lng"))
+    return is_coordinate_in_city(service_city, lat, lng, margin=0.03)
 
 
 def _inverse_score(value: float, minimum: float) -> float:
@@ -259,7 +274,7 @@ def _choose_fallback_ambulance(
     pool = available_ambulances or ambulances
     if not pool:
         return None
-    return min(pool, key=lambda ambulance: float(ambulance.get("crew_readiness", 1.0)))
+    return max(pool, key=lambda ambulance: float(ambulance.get("crew_readiness", 0.0)))
 
 
 def _choose_fallback_hospital(hospitals: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -267,8 +282,34 @@ def _choose_fallback_hospital(hospitals: list[dict[str, Any]]) -> dict[str, Any]
         return None
 
     non_full_hospitals = [hospital for hospital in hospitals if float(hospital.get("occupancy_pct", 100.0)) < 100.0]
-    pool = non_full_hospitals or hospitals
-    return min(pool, key=lambda hospital: (float(hospital.get("occupancy_pct", 100.0)), float(hospital.get("er_wait_minutes", 999.0))))
+    if not non_full_hospitals:
+        return None
+    return min(
+        non_full_hospitals,
+        key=lambda hospital: (
+            float(hospital.get("occupancy_pct", 100.0)),
+            float(hospital.get("er_wait_minutes", 999.0)),
+        ),
+    )
+
+
+def _manual_escalation_response(
+    service_city: str,
+    baseline_eta_minutes: float | None,
+    explanation_text: str,
+) -> dict[str, Any]:
+    return {
+        "status": "error",
+        "ambulance_id": "",
+        "hospital_id": "",
+        "eta_minutes": 0.0,
+        "score_breakdown": None,
+        "baseline_eta_minutes": baseline_eta_minutes,
+        "service_city": service_city,
+        "manual_escalation": True,
+        "reroute_blocked_reason": MANUAL_ESCALATION_TEXT,
+        "explanation_text": explanation_text,
+    }
 
 
 async def select_dispatch(
@@ -280,41 +321,67 @@ async def select_dispatch(
     """Select the best ambulance and hospital pair for an incident."""
 
     active_weights = weights or DispatchWeights()
-    available_ambulances = [ambulance for ambulance in ambulances if ambulance.get("status") == "available"]
-    eligible_hospitals = [hospital for hospital in hospitals if not hospital.get("diversion_status")]
+    service_city = _normalize_city(incident.get("city"))
+    city_ambulances = [ambulance for ambulance in ambulances if same_city(ambulance.get("city"), service_city)]
+    city_hospitals = [hospital for hospital in hospitals if same_city(hospital.get("city"), service_city)]
+    local_ambulances = [ambulance for ambulance in city_ambulances if _same_service_city(ambulance, service_city)]
+    local_hospitals = [hospital for hospital in city_hospitals if _same_service_city(hospital, service_city)]
+    available_ambulances = [
+        ambulance
+        for ambulance in local_ambulances
+        if ambulance.get("status") == "available"
+    ]
+    eligible_hospitals = [
+        hospital
+        for hospital in local_hospitals
+        if not hospital.get("diversion_status")
+    ]
     scene_eta_by_ambulance = await _precompute_scene_etas(incident, available_ambulances)
-    hospital_eta_by_hospital = await _precompute_hospital_etas(incident, hospitals)
+    hospital_eta_by_hospital = await _precompute_hospital_etas(incident, local_hospitals)
     baseline_eta_minutes = await _compute_baseline_eta(
         available_ambulances,
-        hospitals,
+        local_hospitals,
         scene_eta_by_ambulance,
         hospital_eta_by_hospital,
     )
 
-    if not ambulances or not hospitals:
-        return {
-            "status": "error",
-            "ambulance_id": "",
-            "hospital_id": "",
-            "eta_minutes": 0.0,
-            "score_breakdown": None,
-            "baseline_eta_minutes": baseline_eta_minutes,
-            "explanation_text": "No ambulance or hospital records are available for dispatch.",
-        }
+    if not service_city:
+        return _manual_escalation_response(
+            service_city,
+            baseline_eta_minutes,
+            "Incident city is unknown, so automatic dispatch is blocked for safety.",
+        )
 
-    if not available_ambulances or not eligible_hospitals:
-        fallback_ambulance = _choose_fallback_ambulance(ambulances, available_ambulances)
-        fallback_hospital = _choose_fallback_hospital(hospitals)
+    if not ambulances or not hospitals or not city_ambulances or not city_hospitals:
+        return _manual_escalation_response(
+            service_city,
+            baseline_eta_minutes,
+            f"{MANUAL_ESCALATION_TEXT} No ambulance or hospital records are available in {service_city}.",
+        )
+
+    if not local_ambulances or not local_hospitals:
+        return _manual_escalation_response(
+            service_city,
+            baseline_eta_minutes,
+            f"{MANUAL_ESCALATION_TEXT} No usable ambulance or hospital coordinates are inside {service_city}.",
+        )
+
+    if not available_ambulances:
+        return _manual_escalation_response(
+            service_city,
+            baseline_eta_minutes,
+            f"{MANUAL_ESCALATION_TEXT} No available ambulance is inside {service_city}.",
+        )
+
+    if not eligible_hospitals:
+        fallback_ambulance = _choose_fallback_ambulance([], available_ambulances)
+        fallback_hospital = _choose_fallback_hospital(local_hospitals)
         if fallback_ambulance is None or fallback_hospital is None:
-            return {
-                "status": "error",
-                "ambulance_id": "",
-                "hospital_id": "",
-                "eta_minutes": 0.0,
-                "score_breakdown": None,
-                "baseline_eta_minutes": baseline_eta_minutes,
-                "explanation_text": "Fallback dispatch could not find a usable ambulance or hospital.",
-            }
+            return _manual_escalation_response(
+                service_city,
+                baseline_eta_minutes,
+                f"{MANUAL_ESCALATION_TEXT} Local hospitals in {service_city} are exhausted.",
+            )
 
         eta_to_scene = scene_eta_by_ambulance.get(fallback_ambulance["id"])
         if eta_to_scene is None:
@@ -342,9 +409,11 @@ async def select_dispatch(
             "eta_minutes": round(eta_to_scene + eta_to_hospital, 2),
             "score_breakdown": None,
             "baseline_eta_minutes": baseline_eta_minutes,
+            "service_city": service_city,
+            "manual_escalation": False,
             "explanation_text": (
                 f"{fallback_ambulance['id']} selected: last-resort fallback dispatch, "
-                f"{fallback_hospital['id']} chosen as the available non-full hospital, "
+                f"{fallback_hospital['id']} chosen as the available non-full {service_city} hospital, "
                 f"total ETA {eta_to_scene + eta_to_hospital:.1f} min."
             ),
         }
@@ -386,5 +455,7 @@ async def select_dispatch(
         "eta_minutes": round(best_pair["total_eta_minutes"], 2),
         "score_breakdown": score_breakdown,
         "baseline_eta_minutes": baseline_eta_minutes,
+        "service_city": service_city,
+        "manual_escalation": False,
         "explanation_text": _build_explanation_text(best_pair, incident.get("type", ""), active_weights),
     }

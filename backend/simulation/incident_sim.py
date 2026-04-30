@@ -94,12 +94,17 @@ async def create_incident(payload: dict[str, object]) -> dict[str, object]:
     try:
         from api.websocket import broadcast_event
 
+        event = {
+            "type": "incident_created",
+            "incident": payload,
+            "requires_human_review": bool(payload.get("requires_human_review", False)),
+            "review_reason": payload.get("review_reason"),
+        }
+        await broadcast_event(event)
         await broadcast_event(
             {
-                "type": "incident_created",
-                "incident": payload,
-                "requires_human_review": bool(payload.get("requires_human_review", False)),
-                "review_reason": payload.get("review_reason"),
+                **event,
+                "type": "new_incident",
             }
         )
     except Exception:

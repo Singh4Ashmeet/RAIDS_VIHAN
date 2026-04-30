@@ -11,3 +11,156 @@ body {
 html, body { overflow-x: hidden; max-width: 100vw; }
 button, a, [role="button"] { min-height: 44px; min-width: 44px; }
 @media (max-width: 640px) { html { font-size: 15px; } }
+
+.maplibregl-map {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.maplibregl-ctrl-group {
+  border: 1px solid rgba(51, 65, 85, 0.9) !important;
+  background: rgba(15, 23, 42, 0.92) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35) !important;
+}
+
+.maplibregl-ctrl button {
+  background-color: transparent !important;
+  color: #cbd5e1 !important;
+}
+
+.maplibregl-ctrl-attrib {
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.84) !important;
+  color: #94a3b8 !important;
+}
+
+.raid-map-marker {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  padding: 5px 8px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  transform: translateZ(0);
+  transition: border-color 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
+}
+
+.raid-map-marker::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: 0;
+  transform: scale(0.8);
+  animation: raid-marker-pulse 1.7s ease-out infinite;
+}
+
+.raid-map-marker-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+.raid-map-marker-label {
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raid-map-marker-ambulance {
+  border-color: rgba(16, 185, 129, 0.42);
+}
+
+.raid-map-marker-ambulance::before {
+  background: rgba(16, 185, 129, 0.22);
+  opacity: 1;
+}
+
+.raid-map-marker-ambulance .raid-map-marker-icon {
+  background: rgba(16, 185, 129, 0.16);
+}
+
+.raid-map-marker-incident {
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
+.raid-map-marker-incident::before {
+  background: rgba(239, 68, 68, 0.18);
+  opacity: 1;
+}
+
+.raid-map-marker-incident .raid-map-marker-icon {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.raid-map-marker-hospital {
+  border-color: rgba(59, 130, 246, 0.48);
+}
+
+.raid-map-marker-hospital .raid-map-marker-icon {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+}
+
+.raid-map-marker-user {
+  border-color: rgba(96, 165, 250, 0.75);
+  background: rgba(30, 64, 175, 0.92);
+}
+
+.raid-map-marker-user::before {
+  background: rgba(59, 130, 246, 0.28);
+  opacity: 1;
+}
+
+.raid-map-marker-user .raid-map-marker-icon {
+  width: 14px;
+  height: 14px;
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.25);
+}
+
+.raid-map-marker.is-selected {
+  border-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.16), 0 16px 34px rgba(0, 0, 0, 0.45);
+}
+
+.raid-map-marker.is-muted {
+  opacity: 0.48;
+}
+
+@keyframes raid-marker-pulse {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.55);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .raid-map-marker::before {
+    animation: none;
+  }
+}

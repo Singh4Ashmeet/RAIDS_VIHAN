@@ -77,7 +77,22 @@ class SimulationEngine:
 
         from api.websocket import broadcast_event
 
-        await broadcast_event(await self.snapshot_payload())
+        snapshot = await self.snapshot_payload()
+        await broadcast_event(snapshot)
+        await broadcast_event(
+            {
+                "type": "ambulance_location_update",
+                "ambulances": snapshot["ambulances"],
+                "timestamp": snapshot["timestamp"],
+            }
+        )
+        try:
+            from services.realtime_map import build_active_dispatch_eta_events
+
+            for event in await build_active_dispatch_eta_events():
+                await broadcast_event(event)
+        except Exception as exc:
+            logger.warning("Active ETA broadcast failed: %s", exc)
 
     async def snapshot_payload(self) -> dict[str, Any]:
         """Return the current state snapshot payload."""
@@ -96,6 +111,7 @@ class SimulationEngine:
 
         expires_at = utc_now() + timedelta(seconds=seconds)
         TRAFFIC_STATE[city] = {"multiplier": multiplier, "expires_at": expires_at}
+        await self._broadcast_route_change(reason="traffic", city=city)
         return {"city": city, "multiplier": multiplier, "expires_at": expires_at.isoformat()}
 
     async def apply_ambulance_outage(self, ambulance_id: str, seconds: int) -> dict[str, Any]:
@@ -107,6 +123,7 @@ class SimulationEngine:
             raise ValueError(f"Ambulance {ambulance_id} was not found.")
         self.ambulance_outages[ambulance_id] = expires_at
         await update_record("ambulances", ambulance_id, {"status": "unavailable"})
+        await self._broadcast_route_change(reason="ambulance_breakdown", affected_ambulance_id=ambulance_id)
         return {"ambulance_id": ambulance_id, "expires_at": expires_at.isoformat()}
 
     async def apply_hospital_overload(self, hospital_id: str) -> dict[str, Any]:
@@ -124,7 +141,33 @@ class SimulationEngine:
                 "acceptance_score": 0.1,
             },
         )
+        await self._broadcast_route_change(reason="hospital_load", affected_hospital_id=hospital_id)
         return {"hospital_id": hospital_id, "occupancy_pct": 95.0, "diversion_status": True}
+
+    async def _broadcast_route_change(
+        self,
+        *,
+        reason: str,
+        city: str | None = None,
+        affected_ambulance_id: str | None = None,
+        affected_hospital_id: str | None = None,
+    ) -> None:
+        """Broadcast route-change visualization payloads after simulation mutations."""
+
+        try:
+            from api.websocket import broadcast_event
+            from services.realtime_map import build_route_change_event
+
+            await broadcast_event(
+                await build_route_change_event(
+                    reason=reason,
+                    city=city,
+                    affected_ambulance_id=affected_ambulance_id,
+                    affected_hospital_id=affected_hospital_id,
+                )
+            )
+        except Exception as exc:
+            logger.warning("Route-change broadcast failed for %s: %s", reason, exc)
 
     def _clear_expired_traffic(self) -> None:
         """Reset expired traffic overrides back to default."""

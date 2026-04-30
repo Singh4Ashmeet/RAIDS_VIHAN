@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from core.config import CITY_AMBULANCE_BASE_SPEED_KMH, CITY_CENTERS, TRAFFIC_STATE, utc_now
+from core.config import CITY_AMBULANCE_BASE_SPEED_KMH, CITY_BOUNDS, CITY_CENTERS, TRAFFIC_STATE, utc_now
 from services.routing import get_travel_time
 
 
@@ -18,6 +18,42 @@ def get_active_traffic_multiplier(city: str) -> float:
         state["multiplier"] = 1.0
         state["expires_at"] = None
     return float(state["multiplier"])
+
+
+def city_key(value: Any) -> str:
+    """Return a normalized key for city comparisons."""
+
+    return str(value or "").strip().casefold()
+
+
+def same_city(left: Any, right: Any) -> bool:
+    """Return whether two city labels describe the same configured city."""
+
+    return bool(left and right and city_key(left) == city_key(right))
+
+
+def is_coordinate_in_city(city: str | None, lat: float | None, lng: float | None, *, margin: float = 0.0) -> bool:
+    """Return whether a coordinate sits inside the configured service bounds for a city."""
+
+    if not city or lat is None or lng is None:
+        return False
+    bounds = CITY_BOUNDS.get(str(city).strip())
+    if bounds is None:
+        return False
+    latitude = float(lat)
+    longitude = float(lng)
+    return (
+        bounds["lat_min"] - margin <= latitude <= bounds["lat_max"] + margin
+        and bounds["lng_min"] - margin <= longitude <= bounds["lng_max"] + margin
+    )
+
+
+def home_city_position(city: str | None) -> tuple[float, float] | None:
+    """Return the configured service-center coordinate for a city."""
+
+    if not city:
+        return None
+    return CITY_CENTERS.get(str(city).strip())
 
 
 async def score_route(

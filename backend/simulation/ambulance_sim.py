@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from core.config import AMBULANCE_STEP_MAX, AMBULANCE_STEP_MIN, HOSPITAL_HOLD_TICKS, SCENE_HOLD_TICKS, utc_now
 from repositories.database import fetch_all, fetch_one, update_record
-from services.geo_service import interpolate_towards
+from services.geo_service import home_city_position, interpolate_towards, is_coordinate_in_city, same_city
 from services.routing import get_travel_time
 
 if TYPE_CHECKING:
@@ -21,6 +21,11 @@ async def advance_ambulances(engine: "SimulationEngine") -> None:
     now = utc_now()
     ambulances = await fetch_all("ambulances")
     for ambulance in ambulances:
+        if await _release_invalid_assignment(ambulance):
+            continue
+        if await _rehome_available_unit(ambulance):
+            continue
+
         outage_until = engine.ambulance_outages.get(ambulance["id"])
         if outage_until is not None and outage_until > now:
             if ambulance["status"] != "unavailable":
@@ -62,6 +67,63 @@ async def advance_ambulances(engine: "SimulationEngine") -> None:
             if hospital is None:
                 continue
             await _move_towards_hospital(engine, ambulance, hospital, incident)
+
+
+async def _release_invalid_assignment(ambulance: dict) -> bool:
+    """Stop legacy cross-city assignments from moving units across India."""
+
+    incident = None
+    hospital = None
+    if ambulance.get("assigned_incident_id"):
+        incident = await fetch_one("incidents", ambulance["assigned_incident_id"])
+    if ambulance.get("assigned_hospital_id"):
+        hospital = await fetch_one("hospitals", ambulance["assigned_hospital_id"])
+
+    mismatched_incident = incident is not None and not same_city(ambulance.get("city"), incident.get("city"))
+    mismatched_hospital = hospital is not None and not same_city(ambulance.get("city"), hospital.get("city"))
+    if not (mismatched_incident or mismatched_hospital):
+        return False
+
+    home_position = home_city_position(ambulance.get("city"))
+    updates = {
+        "status": "available",
+        "assigned_incident_id": None,
+        "assigned_hospital_id": None,
+    }
+    if home_position is not None:
+        updates["current_lat"] = round(home_position[0], 6)
+        updates["current_lng"] = round(home_position[1], 6)
+    await update_record("ambulances", ambulance["id"], updates)
+    return True
+
+
+async def _rehome_available_unit(ambulance: dict) -> bool:
+    """Keep idle units inside their declared city service area."""
+
+    if ambulance.get("status") != "available":
+        return False
+    if is_coordinate_in_city(
+        ambulance.get("city"),
+        ambulance.get("current_lat"),
+        ambulance.get("current_lng"),
+        margin=0.03,
+    ):
+        return False
+
+    home_position = home_city_position(ambulance.get("city"))
+    if home_position is None:
+        return False
+    await update_record(
+        "ambulances",
+        ambulance["id"],
+        {
+            "current_lat": round(home_position[0], 6),
+            "current_lng": round(home_position[1], 6),
+            "assigned_incident_id": None,
+            "assigned_hospital_id": None,
+        },
+    )
+    return True
 
 
 async def _move_towards_incident(

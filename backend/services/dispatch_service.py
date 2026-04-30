@@ -246,8 +246,29 @@ async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None
         dispatch_plan["audit_id"] = audit_id
 
         from api.websocket import broadcast_event
+        from services.realtime_map import build_dispatch_update_event
 
-        await broadcast_event(_dispatch_created_payload(dispatch_plan))
+        dispatch_event = _dispatch_created_payload(dispatch_plan)
+        try:
+            map_event = await build_dispatch_update_event(
+                dispatch_plan,
+                incident=incident,
+                ambulance=ambulance,
+                hospital=hospital,
+                ambulances=ambulances,
+                hospitals=hospitals,
+            )
+            map_context = {
+                key: value
+                for key, value in map_event.items()
+                if key not in {"type", "dispatch_id", "dispatch_plan"}
+            }
+            dispatch_event.update(map_context)
+            await broadcast_event(dispatch_event)
+            await broadcast_event(map_event)
+        except Exception as exc:
+            logger.warning("Realtime map payload failed for dispatch %s: %s", dispatch_plan["id"], exc)
+            await broadcast_event(dispatch_event)
         analytics = await build_analytics_snapshot()
         await broadcast_score_update(analytics)
         if selection["status"] == "fallback":

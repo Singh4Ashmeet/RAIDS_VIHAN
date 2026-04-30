@@ -107,6 +107,18 @@ function buildNotificationEvents(notifications) {
         }
       }
 
+      if (entry?.type === 'route_change') {
+        return {
+          key: `route-${timestamp}-${index}`,
+          sortTime: timestamp,
+          label: 'Reroute',
+          variant: 'warning',
+          time: formatTime(timestamp),
+          summary: entry.message || 'Route changed due to live conditions',
+          borderClass: 'border-l-2 border-amber-500/50',
+        }
+      }
+
       if (entry?.type === 'tick' || entry?.label === 'Tick') {
         return {
           key: `tick-${timestamp}-${index}`,

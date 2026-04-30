@@ -8,8 +8,11 @@ from typing import Any, Callable
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from repositories.ambulance_repo import AmbulanceRepository
+from repositories.dispatch_repo import DispatchRepository
 from repositories.hospital_repo import HospitalRepository
+from repositories.incident_repo import IncidentRepository
 from services.geo_service import get_active_traffic_multiplier
+from services.realtime_map import build_dispatch_map_context
 
 try:
     from api.auth import verify_ws_token
@@ -26,13 +29,31 @@ async def state_snapshot_payload() -> dict[str, Any]:
 
     ambulances = await AmbulanceRepository().get_all()
     hospitals = await HospitalRepository().get_all()
+    incidents = await IncidentRepository().get_recent(100)
+    active_dispatches = await DispatchRepository().get_active()
     traffic = {hospital["city"]: get_active_traffic_multiplier(hospital["city"]) for hospital in hospitals}
-    return {
+    payload = {
         "type": "state_snapshot",
         "ambulances": ambulances,
         "hospitals": hospitals,
+        "incidents": incidents,
+        "active_dispatches": active_dispatches,
         "traffic_multipliers": traffic,
     }
+    if active_dispatches:
+        fallback_context = None
+        for dispatch_plan in active_dispatches:
+            try:
+                map_context = await build_dispatch_map_context(dispatch_plan)
+            except Exception:
+                continue
+            if map_context.get("route"):
+                payload["map_context"] = map_context
+                break
+            fallback_context = fallback_context or map_context
+        else:
+            payload["map_context"] = fallback_context
+    return payload
 
 
 async def _broadcast_to_matching_clients(

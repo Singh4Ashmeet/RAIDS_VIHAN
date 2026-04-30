@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { MapPin } from 'lucide-react'
 
 import useDispatchStore from '../../store/dispatchStore'
+import RealtimeDispatchMap from '../../components/maps/RealtimeDispatchMap'
 import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
@@ -74,6 +75,8 @@ export default function DispatchStatus() {
 
   return (
     <div className="space-y-4">
+      <RealtimeDispatchMap mode="user" />
+
       <Card className="border-l-4 border-l-emerald-500">
         <div className="flex items-start justify-between gap-3">
           <div>

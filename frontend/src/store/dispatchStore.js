@@ -9,6 +9,126 @@ function normalizeDispatch(plan) {
   return { status: 'success', message: 'OK', data: plan }
 }
 
+function upsertById(items, nextItem) {
+  if (!nextItem?.id) return items
+  return [
+    nextItem,
+    ...items.filter((item) => item.id !== nextItem.id),
+  ]
+}
+
+function mergeById(items, nextItem) {
+  if (!nextItem?.id) return items
+  if (!items.some((item) => item.id === nextItem.id)) {
+    return [nextItem, ...items]
+  }
+  return items.map((item) => (
+    item.id === nextItem.id ? { ...item, ...nextItem } : item
+  ))
+}
+
+function mergeAmbulanceUpdates(current, message) {
+  const updates = Array.isArray(message.ambulances)
+    ? message.ambulances
+    : message.ambulance
+      ? [message.ambulance]
+      : []
+  if (updates.length === 0) return current
+  const byId = new Map(current.map((item) => [item.id, item]))
+  updates.forEach((item) => {
+    byId.set(item.id, { ...(byId.get(item.id) || {}), ...item })
+  })
+  return Array.from(byId.values()).sort((left, right) => String(left.id).localeCompare(String(right.id)))
+}
+
+function mergeRoute(previous, nextRoute) {
+  if (!nextRoute) return previous
+  if (
+    previous &&
+    previous.dispatch_id === nextRoute.dispatch_id &&
+    !nextRoute.coordinates &&
+    previous.coordinates
+  ) {
+    return { ...previous, ...nextRoute, coordinates: previous.coordinates }
+  }
+  return { ...(previous || {}), ...nextRoute }
+}
+
+function cityKey(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function findEntityById(items, id) {
+  if (!id) return null
+  return items.find((item) => item.id === id) || null
+}
+
+function routeEntityContext(state, route, mapEntities = {}) {
+  const mapHospitals = Array.isArray(mapEntities.hospitals) ? mapEntities.hospitals : []
+  return {
+    incident: mapEntities.incident?.id === route?.incident_id
+      ? mapEntities.incident
+      : findEntityById(state.incidents, route?.incident_id),
+    ambulance: mapEntities.ambulance?.id === route?.ambulance_id
+      ? mapEntities.ambulance
+      : findEntityById(state.ambulances, route?.ambulance_id),
+    hospital: mapEntities.hospital?.id === route?.hospital_id
+      ? mapEntities.hospital
+      : findEntityById(mapHospitals, route?.hospital_id) || findEntityById(state.hospitals, route?.hospital_id),
+  }
+}
+
+function isCityLocalRoute(state, route, mapEntities = {}) {
+  if (!route) return false
+  if (route.manual_escalation) return false
+  const { incident, ambulance, hospital } = routeEntityContext(state, route, mapEntities)
+  const serviceCity = cityKey(route.service_city || incident?.city)
+  if (!serviceCity) return true
+  const entityCities = [incident?.city, ambulance?.city, hospital?.city].filter(Boolean).map(cityKey)
+  return entityCities.every((city) => city === serviceCity)
+}
+
+function filterCityLocalRoutes(state, routes, mapEntities = {}) {
+  if (!Array.isArray(routes)) return routes
+  return routes.filter((route) => isCityLocalRoute(state, route, mapEntities))
+}
+
+function mergeDispatchPlan(current, partialPlan) {
+  if (!partialPlan?.id) return current
+  const currentPlan = current?.data ?? current
+  const currentId = currentPlan?.id
+  if (currentId && currentId !== partialPlan.id) {
+    return current
+  }
+  if (current?.data) {
+    return {
+      ...current,
+      data: {
+        ...current.data,
+        ...partialPlan,
+      },
+    }
+  }
+  return normalizeDispatch({
+    ...(currentPlan || {}),
+    ...partialPlan,
+  })
+}
+
+function shouldApplyRoute(state, route, mapEntities = {}) {
+  if (!route) return false
+  if (!isCityLocalRoute(state, route, mapEntities)) return false
+  const currentDispatch = state.lastDispatch?.data ?? state.lastDispatch
+  const hasGeometry = Array.isArray(route.coordinates) && route.coordinates.length > 0
+  if (currentDispatch?.id && route.dispatch_id && route.dispatch_id !== currentDispatch.id) {
+    return hasGeometry && !state.activeRoute?.dispatch_id
+  }
+  if (state.activeRoute?.dispatch_id && route.dispatch_id && route.dispatch_id !== state.activeRoute.dispatch_id) {
+    return hasGeometry
+  }
+  return true
+}
+
 function unwrapApiData(res) {
   return res?.data?.data ?? res?.data ?? null
 }
@@ -56,6 +176,13 @@ const useDispatchStore = create((set, get) => ({
   overrideError: null,
   lastOverride: null,
   trafficMultiplier: 1,
+  trafficMultipliers: {},
+  activeRoute: null,
+  alternateRoutes: [],
+  ambulanceOptions: [],
+  routeChange: null,
+  simulationMode: false,
+  selectedMapAmbulanceId: null,
   wsStatus:     'disconnected',
   systemStatus: 'normal',
   _ws:          null,
@@ -71,6 +198,58 @@ const useDispatchStore = create((set, get) => ({
   },
 
   clearOverrideError: () => set({ overrideError: null }),
+
+  setSimulationMode: (simulationMode) => set({ simulationMode }),
+
+  setSelectedMapAmbulanceId: (selectedMapAmbulanceId) => set({ selectedMapAmbulanceId }),
+
+  applyMapContext: (context) => {
+    if (!context) return
+    set((state) => {
+      const route = context.route
+      const mapEntities = context.map_entities || {}
+      const applyRoute = shouldApplyRoute(state, route, mapEntities)
+      return {
+        activeRoute: applyRoute ? mergeRoute(state.activeRoute, route) : state.activeRoute,
+        alternateRoutes: Array.isArray(context.alternate_routes)
+          ? filterCityLocalRoutes(state, context.alternate_routes, mapEntities)
+          : state.alternateRoutes,
+        ambulanceOptions: Array.isArray(context.ambulance_options)
+          ? context.ambulance_options
+          : state.ambulanceOptions,
+        incidents: mapEntities.incident
+          ? upsertById(state.incidents, mapEntities.incident)
+          : state.incidents,
+        ambulances: mapEntities.ambulance
+          ? mergeById(state.ambulances, mapEntities.ambulance)
+          : state.ambulances,
+        hospitals: Array.isArray(mapEntities.hospitals)
+          ? mapEntities.hospitals
+          : mapEntities.hospital
+            ? mergeById(state.hospitals, mapEntities.hospital)
+            : state.hospitals,
+      }
+    })
+  },
+
+  applyDispatchUpdate: (msg) => {
+    if (!msg) return
+    set((state) => ({
+      lastDispatch: msg.dispatch_plan
+        ? mergeDispatchPlan(state.lastDispatch, msg.dispatch_plan)
+        : state.lastDispatch,
+      activeRoute: shouldApplyRoute(state, msg.route, msg.map_entities || {})
+        ? mergeRoute(state.activeRoute, msg.route)
+        : state.activeRoute,
+      alternateRoutes: Array.isArray(msg.alternate_routes)
+        ? filterCityLocalRoutes(state, msg.alternate_routes, msg.map_entities || {})
+        : state.alternateRoutes,
+      ambulanceOptions: Array.isArray(msg.ambulance_options)
+        ? msg.ambulance_options
+        : state.ambulanceOptions,
+    }))
+    get().applyMapContext(msg)
+  },
 
   dismissAnomalyAlert: () => set((state) => ({
     anomalyAlerts: state.anomalyAlerts.slice(1),
@@ -130,7 +309,7 @@ const useDispatchStore = create((set, get) => ({
         : state.dispatchHistory,
       systemStatus: status === 'fallback' ? 'fallback'
                   : status === 'error'    ? 'overload'
-                  : 'normal',
+          : 'normal',
     }))
   },
 
@@ -238,7 +417,21 @@ const useDispatchStore = create((set, get) => ({
             set({
               ambulances: msg.ambulances || get().ambulances,
               hospitals:  msg.hospitals  || get().hospitals,
+              incidents:  msg.incidents  || get().incidents,
+              trafficMultipliers: msg.traffic_multipliers || get().trafficMultipliers,
             })
+            if (msg.traffic_multipliers) {
+              const maxTraffic = Math.max(1, ...Object.values(msg.traffic_multipliers).map(Number))
+              set({ trafficMultiplier: maxTraffic })
+            }
+            if (msg.map_context) {
+              get().applyMapContext(msg.map_context)
+            }
+          }
+          if (msg.type === 'ambulance_location_update') {
+            set((state) => ({
+              ambulances: mergeAmbulanceUpdates(state.ambulances, msg),
+            }))
           }
           if (msg.type === 'dispatch_created') {
             const current = get().lastDispatch
@@ -268,8 +461,37 @@ const useDispatchStore = create((set, get) => ({
                 )),
               }))
             }
+            get().applyMapContext(msg)
           }
-          if (msg.type === 'incident_created') {
+          if (msg.type === 'dispatch_update') {
+            get().applyDispatchUpdate(msg)
+          }
+          if (msg.type === 'route_change') {
+            const routeChangeMapEntities = msg.map_entities || {}
+            set((state) => ({
+              routeChange: isCityLocalRoute(state, msg.new_route, routeChangeMapEntities)
+                ? msg
+                : { ...msg, new_route: null, alternate_routes: [] },
+              activeRoute: isCityLocalRoute(state, msg.new_route, routeChangeMapEntities)
+                ? mergeRoute(state.activeRoute, msg.new_route)
+                : state.activeRoute,
+              alternateRoutes: Array.isArray(msg.alternate_routes)
+                ? filterCityLocalRoutes(state, msg.alternate_routes, routeChangeMapEntities)
+                : state.alternateRoutes,
+              ambulanceOptions: Array.isArray(msg.ambulance_options)
+                ? msg.ambulance_options
+                : state.ambulanceOptions,
+              notifications: [
+                {
+                  type: 'route_change',
+                  message: msg.label || 'Route changed',
+                  timestamp: msg.timestamp,
+                },
+                ...state.notifications,
+              ].slice(0, 20),
+            }))
+          }
+          if (msg.type === 'incident_created' || msg.type === 'new_incident') {
             const incident = {
               ...(msg.incident || {}),
               requires_human_review: msg.requires_human_review ?? msg.incident?.requires_human_review ?? false,
@@ -277,10 +499,7 @@ const useDispatchStore = create((set, get) => ({
             }
             if (incident.id) {
               set((state) => ({
-                incidents: [
-                  incident,
-                  ...state.incidents.filter((item) => item.id !== incident.id),
-                ],
+                incidents: upsertById(state.incidents, incident),
               }))
             }
           }

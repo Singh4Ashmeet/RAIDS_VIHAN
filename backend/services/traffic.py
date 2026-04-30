@@ -11,7 +11,7 @@ from typing import Final
 
 import httpx
 
-from core.config import KOLKATA_TZ
+from core.config import KOLKATA_TZ, TRAFFIC_STATE, utc_now
 
 logger = logging.getLogger("raid.traffic")
 
@@ -107,6 +107,23 @@ def _heuristic_multiplier(city: str | None) -> float:
     return _cap_multiplier(base_multiplier + city_boost)
 
 
+def _active_override_multiplier(city: str | None) -> float | None:
+    """Return a temporary simulation traffic override when one is active."""
+
+    if not city:
+        return None
+    state = TRAFFIC_STATE.get(str(city))
+    if state is None:
+        return None
+    expires_at = state.get("expires_at")
+    if expires_at is not None and expires_at <= utc_now():
+        state["multiplier"] = 1.0
+        state["expires_at"] = None
+        return None
+    multiplier = float(state.get("multiplier") or 1.0)
+    return multiplier if multiplier > 1.0 else None
+
+
 async def _fetch_tomtom_multiplier(lat: float, lng: float) -> float | None:
     api_key = os.getenv("TOMTOM_API_KEY")
     if not api_key:
@@ -184,6 +201,10 @@ async def _get_cached_heuristic_multiplier(city: str | None) -> float:
 
 async def get_traffic_multiplier(lat: float, lng: float, city: str | None = None) -> float:
     """Return a traffic congestion multiplier for a coordinate pair in India."""
+
+    override_multiplier = _active_override_multiplier(city)
+    if override_multiplier is not None:
+        return _cap_multiplier(override_multiplier)
 
     tomtom_multiplier = await _get_tomtom_cached_multiplier(lat, lng)
     if tomtom_multiplier is not None:

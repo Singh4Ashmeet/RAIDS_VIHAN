@@ -26,6 +26,10 @@ function resetStores() {
     wsStatus: 'disconnected',
     systemStatus: 'normal',
     trafficMultiplier: 1,
+    activeRoute: null,
+    alternateRoutes: [],
+    ambulanceOptions: [],
+    routeChange: null,
     _ws: null,
     _wsReconnectAttempts: 0,
     _wsReconnectTimer: null,
@@ -96,5 +100,63 @@ describe('WebSocket reconnection', () => {
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(3)
     await vi.advanceTimersByTimeAsync(4000)
     expect(MockWebSocket.instances).toHaveLength(4)
+  })
+
+  it('blocks cross-city route_change routes and keeps the existing local route', async () => {
+    useDispatchStore.setState({
+      incidents: [{ id: 'INC-MUM-1', city: 'Mumbai' }],
+      ambulances: [
+        { id: 'AMB-MUM-1', city: 'Mumbai' },
+        { id: 'AMB-HYD-1', city: 'Hyderabad' },
+      ],
+      hospitals: [
+        { id: 'HOSP-MUM-1', city: 'Mumbai' },
+        { id: 'HOSP-HYD-1', city: 'Hyderabad' },
+      ],
+      activeRoute: {
+        dispatch_id: 'DISP-1',
+        incident_id: 'INC-MUM-1',
+        ambulance_id: 'AMB-MUM-1',
+        hospital_id: 'HOSP-MUM-1',
+        service_city: 'Mumbai',
+        coordinates: [[72.87, 19.07], [72.83, 19.12]],
+      },
+    })
+
+    useDispatchStore.getState().connectWS()
+    await vi.advanceTimersByTimeAsync(0)
+
+    MockWebSocket.instances[0].simulateMessage({
+      type: 'route_change',
+      dispatch_id: 'DISP-1',
+      label: 'Manual escalation required; no same-city unit/hospital available',
+      manual_escalation: true,
+      reroute_blocked_reason: 'No feasible same-city dispatch available; manual mutual-aid escalation required.',
+      old_route: useDispatchStore.getState().activeRoute,
+      new_route: {
+        dispatch_id: 'DISP-1',
+        incident_id: 'INC-MUM-1',
+        ambulance_id: 'AMB-HYD-1',
+        hospital_id: 'HOSP-HYD-1',
+        service_city: 'Mumbai',
+        coordinates: [[78.48, 17.38], [72.87, 19.07]],
+      },
+      alternate_routes: [
+        {
+          incident_id: 'INC-MUM-1',
+          ambulance_id: 'AMB-HYD-1',
+          hospital_id: 'HOSP-HYD-1',
+          service_city: 'Mumbai',
+          coordinates: [[78.48, 17.38], [72.87, 19.07]],
+        },
+      ],
+    })
+
+    const state = useDispatchStore.getState()
+    expect(state.activeRoute.ambulance_id).toBe('AMB-MUM-1')
+    expect(state.activeRoute.hospital_id).toBe('HOSP-MUM-1')
+    expect(state.routeChange.new_route).toBeNull()
+    expect(state.alternateRoutes).toHaveLength(0)
+    expect(state.notifications[0].message).toMatch(/manual escalation/i)
   })
 })
