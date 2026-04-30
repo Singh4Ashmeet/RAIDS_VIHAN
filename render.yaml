@@ -2,8 +2,10 @@ services:
   - type: web
     name: raid-nexus-backend
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         sync: false
