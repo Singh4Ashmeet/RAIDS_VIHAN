@@ -16,7 +16,6 @@ import {
 
 import useDispatchStore from '../../store/dispatchStore'
 import OverridePanel from '../../components/OverridePanel'
-import RealtimeDispatchMap from '../../components/maps/RealtimeDispatchMap'
 import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
@@ -257,13 +256,6 @@ export default function CommandCenter() {
 
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">
-          <RealtimeDispatchMap
-            mode="admin"
-            selectedIncidentId={selectedIncidentId}
-            onSelectIncident={setSelectedIncidentId}
-            className="mb-4"
-          />
-
           {anomalyAlerts.length > 0 ? (
             <Card className="mb-4 border-red-500/30 bg-red-500/10">
               <div className="flex items-start justify-between gap-3">

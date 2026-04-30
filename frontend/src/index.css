@@ -40,11 +40,11 @@ button, a, [role="button"] { min-height: 44px; min-width: 44px; }
   min-width: 0;
   min-height: 0;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
   border: 1px solid rgba(51, 65, 85, 0.9);
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.92);
-  padding: 5px 8px;
+  padding: 4px;
   color: #e2e8f0;
   font-size: 11px;
   font-weight: 700;
@@ -67,18 +67,29 @@ button, a, [role="button"] { min-height: 44px; min-width: 44px; }
 
 .raid-map-marker-icon {
   display: inline-flex;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .raid-map-marker-label {
-  max-width: 78px;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  max-width: 104px;
   overflow: hidden;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  padding: 4px 7px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-2px);
   text-overflow: ellipsis;
+  transition: opacity 160ms ease, transform 160ms ease;
   white-space: nowrap;
 }
 
@@ -138,6 +149,13 @@ button, a, [role="button"] { min-height: 44px; min-width: 44px; }
 .raid-map-marker.is-selected {
   border-color: rgba(255, 255, 255, 0.72);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.16), 0 16px 34px rgba(0, 0, 0, 0.45);
+}
+
+.raid-map-marker:hover .raid-map-marker-label,
+.raid-map-marker:focus-visible .raid-map-marker-label,
+.raid-map-marker.is-selected .raid-map-marker-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .raid-map-marker.is-muted {

@@ -13,7 +13,9 @@ import {
   HeartPulse,
   Hospital,
   LocateFixed,
+  Maximize2,
   MapPin,
+  Minimize2,
   Navigation,
   RadioTower,
   Route,
@@ -32,6 +34,32 @@ const CITY_CENTERS = {
   Bengaluru: [77.5946, 12.9716],
   Chennai: [80.2707, 13.0827],
   Hyderabad: [78.4867, 17.385],
+}
+const CITY_NAMES = Object.keys(CITY_CENTERS)
+
+function cityKey(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function sameCity(left, right) {
+  const leftKey = cityKey(left)
+  const rightKey = cityKey(right)
+  return Boolean(leftKey && rightKey && leftKey === rightKey)
+}
+
+function inServiceCity(item, city) {
+  return !city || sameCity(item?.city, city)
+}
+
+function mergeUniqueById(primary, extras) {
+  const byId = new Map()
+  primary.forEach((item) => {
+    if (item?.id) byId.set(item.id, item)
+  })
+  extras.forEach((item) => {
+    if (item?.id) byId.set(item.id, item)
+  })
+  return Array.from(byId.values())
 }
 
 const DARK_RASTER_STYLE = {
@@ -151,7 +179,7 @@ function makeMarkerElement(kind, item, selected = false) {
 
   const icon = document.createElement('span')
   icon.className = 'raid-map-marker-icon'
-  if (kind === 'ambulance') icon.textContent = '🚑'
+  if (kind === 'ambulance') icon.textContent = 'A'
   if (kind === 'incident') icon.textContent = '!'
   if (kind === 'hospital') icon.textContent = 'H'
   if (kind === 'user') icon.textContent = ''
@@ -438,8 +466,10 @@ function UserStatusRail({ route }) {
 
 export default function RealtimeDispatchMap({
   mode = 'admin',
+  title,
   selectedIncidentId,
   onSelectIncident,
+  showScenarioControls = true,
   className,
 }) {
   const mapContainerRef = useRef(null)
@@ -468,39 +498,59 @@ export default function RealtimeDispatchMap({
   const [scenarioBusy, setScenarioBusy] = useState('')
   const [demandData, setDemandData] = useState(null)
   const [selectedAmbulance, setSelectedAmbulance] = useState(null)
+  const [manualCity, setManualCity] = useState('')
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const dispatch = lastDispatch?.data ?? lastDispatch
   const routeIncident = incidents.find((item) => item.id === activeRoute?.incident_id)
-  const selectedIncident = incidents.find((item) => item.id === selectedIncidentId)
-    || routeIncident
-    || incidents[0]
+  const selectedIncidentById = incidents.find((item) => item.id === selectedIncidentId)
   const routeHospital = hospitals.find((item) => item.id === activeRoute?.hospital_id || item.id === dispatch?.hospital_id)
   const assignedAmbulanceId = activeRoute?.ambulance_id || dispatch?.ambulance_id
-  const city = selectedIncident?.city || routeHospital?.city || 'Delhi'
-  const blockedRouteMessage = routeChange?.manual_escalation || routeChange?.reroute_blocked_reason || (routeChange && routeChange.new_route === null && routeChange.old_route)
-    ? (routeChange.label || 'Manual escalation required; no same-city unit/hospital available')
+  const city = manualCity
+    || activeRoute?.service_city
+    || selectedIncidentById?.city
+    || routeIncident?.city
+    || routeHospital?.city
+    || 'Delhi'
+  const selectedIncident = (
+    selectedIncidentById && inServiceCity(selectedIncidentById, city)
+      ? selectedIncidentById
+      : routeIncident && inServiceCity(routeIncident, city)
+        ? routeIncident
+        : incidents.find((item) => inServiceCity(item, city)) || selectedIncidentById || routeIncident || incidents[0]
+  )
+  const scopedActiveRoute = !activeRoute?.service_city || sameCity(activeRoute.service_city, city) ? activeRoute : null
+  const scopedAlternateRoutes = (alternateRoutes || []).filter((route) => !route.service_city || sameCity(route.service_city, city))
+  const routeChangeCity = routeChange?.service_city || routeChange?.new_route?.service_city || routeChange?.old_route?.service_city || routeChange?.city
+  const scopedRouteChange = !routeChangeCity || sameCity(routeChangeCity, city) ? routeChange : null
+  const blockedRouteMessage = scopedRouteChange?.manual_escalation || scopedRouteChange?.reroute_blocked_reason || (scopedRouteChange && scopedRouteChange.new_route === null && scopedRouteChange.old_route)
+    ? (scopedRouteChange.label || 'Manual escalation required; no same-city unit/hospital available')
     : ''
 
   const visibleAmbulances = useMemo(() => {
     if (mode === 'user') {
       return ambulances.filter((item) => item.id === assignedAmbulanceId)
     }
-    return ambulances
-  }, [ambulances, assignedAmbulanceId, mode])
+    const cityAmbulances = ambulances.filter((item) => inServiceCity(item, city))
+    const selectedAmbulance = ambulances.find((item) => item.id === scopedActiveRoute?.ambulance_id)
+    return mergeUniqueById(cityAmbulances, selectedAmbulance ? [selectedAmbulance] : [])
+  }, [ambulances, assignedAmbulanceId, city, mode, scopedActiveRoute?.ambulance_id])
 
   const visibleIncidents = useMemo(() => {
     if (mode === 'user') {
       return selectedIncident ? [selectedIncident] : []
     }
-    return incidents
-  }, [incidents, mode, selectedIncident])
+    const cityIncidents = incidents.filter((item) => inServiceCity(item, city))
+    return mergeUniqueById(cityIncidents, selectedIncident ? [selectedIncident] : [])
+  }, [city, incidents, mode, selectedIncident])
 
   const visibleHospitals = useMemo(() => {
     if (mode === 'user') {
       return routeHospital ? [routeHospital] : []
     }
-    return hospitals
-  }, [hospitals, mode, routeHospital])
+    const cityHospitals = hospitals.filter((item) => inServiceCity(item, city))
+    return mergeUniqueById(cityHospitals, routeHospital && inServiceCity(routeHospital, city) ? [routeHospital] : [])
+  }, [city, hospitals, mode, routeHospital])
 
   const userLocation = mode === 'user' && selectedIncident
     ? {
@@ -524,6 +574,12 @@ export default function RealtimeDispatchMap({
       cancelled = true
     }
   }, [city, mode])
+
+  useEffect(() => {
+    if (selectedAmbulance && !inServiceCity(selectedAmbulance, city)) {
+      setSelectedAmbulance(null)
+    }
+  }, [city, selectedAmbulance])
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current || isJsdom()) return undefined
@@ -559,25 +615,30 @@ export default function RealtimeDispatchMap({
     const map = mapRef.current
     if (!map || !mapLoaded) return
     const center = CITY_CENTERS[city]
-    if (center && !activeRoute?.coordinates?.length) {
+    if (center && !scopedActiveRoute?.coordinates?.length) {
       map.easeTo({ center, zoom: 11, duration: 700 })
     }
-  }, [activeRoute?.coordinates?.length, city, mapLoaded])
+  }, [city, mapLoaded, scopedActiveRoute?.coordinates?.length])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => mapRef.current?.resize(), 120)
+    return () => window.clearTimeout(timer)
+  }, [isFullscreen])
 
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapLoaded) return
 
-    updateGeoJsonSource(map, 'main-route', featureCollection([routeFeature(activeRoute)]))
+    updateGeoJsonSource(map, 'main-route', featureCollection([routeFeature(scopedActiveRoute)]))
     updateGeoJsonSource(
       map,
       'alternate-routes',
-      featureCollection((alternateRoutes || []).map((route) => routeFeature(route, 'alternate')))
+      featureCollection(scopedAlternateRoutes.map((route) => routeFeature(route, 'alternate')))
     )
-    updateGeoJsonSource(map, 'old-route', featureCollection([routeFeature(routeChange?.old_route, 'old')]))
-    updateGeoJsonSource(map, 'new-route', featureCollection([routeFeature(routeChange?.new_route, 'new')]))
+    updateGeoJsonSource(map, 'old-route', featureCollection([routeFeature(scopedRouteChange?.old_route, 'old')]))
+    updateGeoJsonSource(map, 'new-route', featureCollection([routeFeature(scopedRouteChange?.new_route, 'new')]))
 
-    const heatmapFeatures = incidents.map((incident) => ({
+    const heatmapFeatures = visibleIncidents.map((incident) => ({
       type: 'Feature',
       properties: {
         weight: severityWeight(incident.severity),
@@ -601,7 +662,7 @@ export default function RealtimeDispatchMap({
       },
     }))
     updateGeoJsonSource(map, 'demand-hotspots', featureCollection(demandFeatures))
-  }, [activeRoute, alternateRoutes, demandData, incidents, mapLoaded, routeChange])
+  }, [demandData, mapLoaded, scopedActiveRoute, scopedAlternateRoutes, scopedRouteChange, visibleIncidents])
 
   useEffect(() => {
     const map = mapRef.current
@@ -626,15 +687,15 @@ export default function RealtimeDispatchMap({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapLoaded) return
-    const fitKey = `${activeRoute?.dispatch_id || ''}-${activeRoute?.coordinates?.length || 0}`
-    if (!activeRoute?.coordinates?.length || fitKey === routeFitKeyRef.current) return
+    const fitKey = `${scopedActiveRoute?.dispatch_id || ''}-${scopedActiveRoute?.coordinates?.length || 0}-${city}`
+    if (!scopedActiveRoute?.coordinates?.length || fitKey === routeFitKeyRef.current) return
     routeFitKeyRef.current = fitKey
     const extras = [
       coordinatesOf(selectedIncident, 'location_lat', 'location_lng'),
       coordinatesOf(routeHospital, 'lat', 'lng'),
     ]
-    fitMapToRoute(map, activeRoute, extras)
-  }, [activeRoute, mapLoaded, routeHospital, selectedIncident])
+    fitMapToRoute(map, scopedActiveRoute, extras)
+  }, [city, mapLoaded, routeHospital, scopedActiveRoute, selectedIncident])
 
   useMarkerSync(
     mapRef,
@@ -646,7 +707,7 @@ export default function RealtimeDispatchMap({
     {
       kind: 'ambulance',
       animate: true,
-      selectedId: selectedMapAmbulanceId || assignedAmbulanceId,
+      selectedId: selectedMapAmbulanceId || scopedActiveRoute?.ambulance_id || assignedAmbulanceId,
       onClick: (item) => {
         setSelectedMapAmbulanceId(item.id)
         setSelectedAmbulance(item)
@@ -665,7 +726,10 @@ export default function RealtimeDispatchMap({
     {
       kind: 'incident',
       selectedId: selectedIncident?.id,
-      onClick: (item) => onSelectIncident?.(item.id),
+      onClick: (item) => {
+        setManualCity(item.city || '')
+        onSelectIncident?.(item.id)
+      },
       muted: (item) => item.status === 'resolved',
     }
   )
@@ -711,8 +775,8 @@ export default function RealtimeDispatchMap({
   function recenter() {
     const map = mapRef.current
     if (!map) return
-    if (activeRoute?.coordinates?.length) {
-      fitMapToRoute(map, activeRoute)
+    if (scopedActiveRoute?.coordinates?.length) {
+      fitMapToRoute(map, scopedActiveRoute)
       return
     }
     map.easeTo({ center: CITY_CENTERS[city] || [78.9629, 22.5937], zoom: 11, duration: 700 })
@@ -727,10 +791,24 @@ export default function RealtimeDispatchMap({
   }
 
   return (
-    <section className={clsx('relative overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-2xl shadow-black/30', className)}>
-      <div ref={mapContainerRef} className="h-[560px] w-full min-h-[420px]" />
+    <section
+      className={clsx(
+        'relative overflow-hidden border border-slate-700 bg-slate-950 shadow-2xl shadow-black/30',
+        isFullscreen
+          ? 'fixed inset-0 z-[80] rounded-none border-0'
+          : 'rounded-xl',
+        className
+      )}
+    >
+      <div
+        ref={mapContainerRef}
+        className={clsx(
+          'w-full',
+          isFullscreen ? 'h-screen min-h-screen' : 'h-[68vh] min-h-[620px] max-h-[780px]'
+        )}
+      />
 
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.5),transparent_28%,transparent_68%,rgba(15,23,42,0.72))]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.34),transparent_22%,transparent_74%,rgba(15,23,42,0.58))]" />
 
       {mapError ? (
         <div className="absolute left-4 right-4 top-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -738,7 +816,7 @@ export default function RealtimeDispatchMap({
         </div>
       ) : null}
 
-      <div className="absolute left-3 top-3 w-[calc(100%-1.5rem)] max-w-[360px] rounded-xl border border-slate-700 bg-slate-950/90 p-3 shadow-xl shadow-black/30 backdrop-blur sm:left-4 sm:top-4">
+      <div className="absolute left-3 top-3 w-[calc(100%-5.5rem)] max-w-[340px] rounded-xl border border-slate-700 bg-slate-950/88 p-3 shadow-xl shadow-black/30 backdrop-blur sm:left-4 sm:top-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -747,9 +825,9 @@ export default function RealtimeDispatchMap({
               </span>
               <div>
                 <h2 className="text-sm font-semibold text-white">
-                  {mode === 'admin' ? 'Dispatch Map' : 'Ambulance Tracking'}
+                  {title || (mode === 'admin' ? 'Simulation Route Map' : 'Ambulance Tracking')}
                 </h2>
-                <p className="text-xs text-slate-500">{city} live grid</p>
+                <p className="text-xs text-slate-500">{city} service area</p>
               </div>
             </div>
           </div>
@@ -758,14 +836,32 @@ export default function RealtimeDispatchMap({
           </Badge>
         </div>
 
+        {mode === 'admin' ? (
+          <label className="mt-3 block text-xs text-slate-400">
+            Service city
+            <select
+              value={city}
+              onChange={(event) => {
+                setManualCity(event.target.value)
+                onSelectIncident?.('')
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {CITY_NAMES.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
           <div className="rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-2">
             <p className="text-slate-500">Units</p>
-            <p className="mt-0.5 font-semibold text-white">{ambulances.length}</p>
+            <p className="mt-0.5 font-semibold text-white">{visibleAmbulances.length}</p>
           </div>
           <div className="rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-2">
             <p className="text-slate-500">Incidents</p>
-            <p className="mt-0.5 font-semibold text-white">{incidents.length}</p>
+            <p className="mt-0.5 font-semibold text-white">{visibleIncidents.length}</p>
           </div>
           <div className="rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-2">
             <p className="text-slate-500">Traffic</p>
@@ -778,7 +874,7 @@ export default function RealtimeDispatchMap({
         {mode === 'admin' ? (
           <div className="mt-3">
             <ModeToggle simulationMode={simulationMode} setSimulationMode={setSimulationMode} />
-            {simulationMode ? (
+            {simulationMode && showScenarioControls ? (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {SIMULATION_SCENARIOS.map(({ type, label, icon: Icon }) => (
                   <Button
@@ -799,32 +895,43 @@ export default function RealtimeDispatchMap({
           </div>
         ) : (
           <div className="mt-3">
-            <UserStatusRail route={activeRoute} />
+            <UserStatusRail route={scopedActiveRoute} />
           </div>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={recenter}
-        className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/90 text-slate-300 shadow-lg shadow-black/25 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        aria-label="Recenter map"
-        title="Recenter map"
-      >
-        <LocateFixed size={18} />
-      </button>
+      <div className="absolute right-3 top-3 flex gap-2 sm:right-4 sm:top-4">
+        <button
+          type="button"
+          onClick={recenter}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/90 text-slate-300 shadow-lg shadow-black/25 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Recenter map"
+          title="Recenter map"
+        >
+          <LocateFixed size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsFullscreen((value) => !value)}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/90 text-slate-300 shadow-lg shadow-black/25 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label={isFullscreen ? 'Exit fullscreen map' : 'Open fullscreen map'}
+          title={isFullscreen ? 'Exit fullscreen map' : 'Fullscreen map'}
+        >
+          {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+        </button>
+      </div>
 
-      {activeRoute ? (
-        <div className="absolute bottom-3 left-3 right-3 rounded-xl border border-slate-700 bg-slate-950/92 p-3 shadow-xl shadow-black/35 backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-[380px]">
+      {scopedActiveRoute ? (
+        <div className="absolute bottom-3 left-3 right-3 rounded-xl border border-slate-700 bg-slate-950/90 p-3 shadow-xl shadow-black/35 backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-[380px]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="success">{activeRoute.status_label || 'En route'}</Badge>
+                <Badge variant="success">{scopedActiveRoute.status_label || 'En route'}</Badge>
                 <span className="text-xs text-slate-500">
-                  {activeRoute.ambulance_id} to {activeRoute.hospital_id}
+                  {scopedActiveRoute.ambulance_id} to {scopedActiveRoute.hospital_id}
                 </span>
               </div>
-              <p className="mt-2 text-2xl font-bold text-white">{formatEta(activeRoute.eta_minutes)}</p>
+              <p className="mt-2 text-2xl font-bold text-white">{formatEta(scopedActiveRoute.eta_minutes)}</p>
             </div>
             <span className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2 text-emerald-300">
               <Ambulance size={18} />
@@ -835,16 +942,16 @@ export default function RealtimeDispatchMap({
               <AlertTriangle size={14} className="mt-0.5 shrink-0" />
               <span>{blockedRouteMessage}</span>
             </div>
-          ) : routeChange?.label ? (
+          ) : scopedRouteChange?.label ? (
             <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
               <AlertTriangle size={14} />
-              <span>{routeChange.label}</span>
+              <span>{scopedRouteChange.label}</span>
             </div>
           ) : null}
         </div>
       ) : null}
 
-      {!activeRoute && blockedRouteMessage ? (
+      {!scopedActiveRoute && blockedRouteMessage ? (
         <div className="absolute bottom-3 left-3 right-3 rounded-xl border border-red-500/35 bg-red-950/90 p-3 text-sm text-red-100 shadow-xl shadow-black/35 backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-[380px]">
           <div className="flex items-start gap-2">
             <AlertTriangle size={16} className="mt-0.5 shrink-0 text-red-300" />
@@ -856,8 +963,8 @@ export default function RealtimeDispatchMap({
         </div>
       ) : null}
 
-      {mode === 'admin' ? (
-        <div className="absolute bottom-3 right-3 hidden w-[330px] rounded-xl border border-slate-700 bg-slate-950/92 p-3 shadow-xl shadow-black/35 backdrop-blur xl:block">
+      {mode === 'admin' && isFullscreen ? (
+        <div className="absolute bottom-4 right-4 hidden w-[330px] rounded-xl border border-slate-700 bg-slate-950/90 p-3 shadow-xl shadow-black/35 backdrop-blur xl:block">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-2 text-blue-300">
@@ -872,7 +979,7 @@ export default function RealtimeDispatchMap({
               {ambulanceOptions.length || 0}
             </Badge>
           </div>
-          <ScoreBars options={ambulanceOptions} selectedAmbulanceId={activeRoute?.ambulance_id} />
+          <ScoreBars options={ambulanceOptions} selectedAmbulanceId={scopedActiveRoute?.ambulance_id} />
         </div>
       ) : null}
 
@@ -881,7 +988,7 @@ export default function RealtimeDispatchMap({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-white">{selectedAmbulance.id}</p>
-              <p className="text-xs text-slate-500">{selectedAmbulance.city} · {selectedAmbulance.zone}</p>
+              <p className="text-xs text-slate-500">{selectedAmbulance.city} - {selectedAmbulance.zone}</p>
             </div>
             <button
               type="button"
@@ -889,7 +996,7 @@ export default function RealtimeDispatchMap({
               onClick={() => setSelectedAmbulance(null)}
               aria-label="Close ambulance details"
             >
-              x
+              X
             </button>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -914,13 +1021,15 @@ export default function RealtimeDispatchMap({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute bottom-4 left-1/2 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-slate-700 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-400 backdrop-blur lg:flex">
-        <span className="inline-flex items-center gap-1.5"><Ambulance size={13} /> Ambulance</span>
-        <span className="inline-flex items-center gap-1.5"><MapPin size={13} /> Incident</span>
-        <span className="inline-flex items-center gap-1.5"><Hospital size={13} /> Hospital</span>
-        <span className="inline-flex items-center gap-1.5"><Building2 size={13} /> Capacity</span>
-        {mode === 'admin' ? <span className="inline-flex items-center gap-1.5"><Zap size={13} /> Demand</span> : null}
-      </div>
+      {isFullscreen ? (
+        <div className="pointer-events-none absolute bottom-4 left-1/2 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-slate-700 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-400 backdrop-blur lg:flex">
+          <span className="inline-flex items-center gap-1.5"><Ambulance size={13} /> Ambulance</span>
+          <span className="inline-flex items-center gap-1.5"><MapPin size={13} /> Incident</span>
+          <span className="inline-flex items-center gap-1.5"><Hospital size={13} /> Hospital</span>
+          <span className="inline-flex items-center gap-1.5"><Building2 size={13} /> Capacity</span>
+          {mode === 'admin' ? <span className="inline-flex items-center gap-1.5"><Zap size={13} /> Demand</span> : null}
+        </div>
+      ) : null}
     </section>
   )
 }

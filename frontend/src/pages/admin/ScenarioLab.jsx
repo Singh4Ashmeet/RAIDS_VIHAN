@@ -3,6 +3,7 @@ import { clsx } from 'clsx'
 import { Activity, AlertTriangle, Pause, Play, RotateCcw, Route, Siren } from 'lucide-react'
 
 import { fetchAnalytics } from '../../services/api'
+import RealtimeDispatchMap from '../../components/maps/RealtimeDispatchMap'
 import Skeleton from '../../components/ui/Skeleton'
 import ScenarioCard from '../../components/scenario/ScenarioCard'
 import ScenarioStepTrace from '../../components/scenario/ScenarioStepTrace'
@@ -105,6 +106,7 @@ export default function ScenarioLab() {
   const [analytics, setAnalytics] = useState(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
   const [paused, setPaused] = useState(false)
+  const [selectedIncidentId, setSelectedIncidentId] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -178,6 +180,15 @@ export default function ScenarioLab() {
           Scenario controls are paused locally. Resume to run another backend scenario.
         </div>
       ) : null}
+
+      <RealtimeDispatchMap
+        mode="admin"
+        title="Simulation Route Map"
+        selectedIncidentId={selectedIncidentId}
+        onSelectIncident={setSelectedIncidentId}
+        showScenarioControls={false}
+        className="min-h-[620px]"
+      />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
