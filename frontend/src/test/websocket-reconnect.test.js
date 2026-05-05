@@ -63,7 +63,7 @@ describe('WebSocket reconnection', () => {
     MockWebSocket.instances[0].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(1)
 
-    await vi.advanceTimersByTimeAsync(999)
+    await vi.advanceTimersByTimeAsync(1999)
     expect(MockWebSocket.instances).toHaveLength(1)
 
     await vi.advanceTimersByTimeAsync(1)
@@ -74,31 +74,35 @@ describe('WebSocket reconnection', () => {
     MockWebSocket.instances[1].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(1)
 
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(2000)
     await vi.runOnlyPendingTimersAsync()
     expect(MockWebSocket.instances).toHaveLength(3)
   })
 
-  it('uses 1s, 2s, then 4s delays for repeated failed connections', async () => {
+  it('uses 2s, 3s, then 4.5s delays for repeated failed connections', async () => {
     MockWebSocket.autoOpen = false
     useDispatchStore.getState().connectWS()
     expect(MockWebSocket.instances).toHaveLength(1)
 
     MockWebSocket.instances[0].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(1)
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(MockWebSocket.instances).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
     expect(MockWebSocket.instances).toHaveLength(2)
 
     MockWebSocket.instances[1].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(2)
-    await vi.advanceTimersByTimeAsync(1999)
+    await vi.advanceTimersByTimeAsync(2999)
     expect(MockWebSocket.instances).toHaveLength(2)
     await vi.advanceTimersByTimeAsync(1)
     expect(MockWebSocket.instances).toHaveLength(3)
 
     MockWebSocket.instances[2].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(3)
-    await vi.advanceTimersByTimeAsync(4000)
+    await vi.advanceTimersByTimeAsync(4499)
+    expect(MockWebSocket.instances).toHaveLength(3)
+    await vi.advanceTimersByTimeAsync(1)
     expect(MockWebSocket.instances).toHaveLength(4)
   })
 

@@ -5,7 +5,7 @@ from typing import Any
 
 import services.dispatch as dispatch_service
 import services.realtime_map as realtime_map
-from services.dispatch import MANUAL_ESCALATION_TEXT, select_dispatch
+from services.dispatch import MANUAL_ESCALATION_TEXT, predict_with_fallback, select_dispatch
 
 
 INCIDENT_MUMBAI = {
@@ -94,6 +94,7 @@ def test_dispatch_ignores_out_of_city_resources(monkeypatch) -> None:
     assert selection["status"] == "success"
     assert selection["ambulance_id"] == "AMB-MUM-LOCAL"
     assert selection["hospital_id"] == "HOSP-MUM-LOCAL"
+    assert selection["dispatch_tier"] == "heuristic"
     assert selection["service_city"] == "Mumbai"
     assert selection["manual_escalation"] is False
 
@@ -155,7 +156,30 @@ def test_dispatch_uses_same_city_degraded_hospital_fallback(monkeypatch) -> None
     assert selection["status"] == "fallback"
     assert selection["ambulance_id"] == "AMB-MUM-LOCAL"
     assert selection["hospital_id"] == "HOSP-MUM-DIVERTED"
+    assert selection["dispatch_tier"] == "static"
     assert selection["manual_escalation"] is False
+
+
+def test_predict_with_fallback_reports_heuristic_tier() -> None:
+    selected, tier = predict_with_fallback(
+        [ambulance("AMB-MUM-LOCAL", "Mumbai", readiness=0.8)],
+        INCIDENT_MUMBAI,
+        [hospital("HOSP-MUM-LOCAL", "Mumbai")],
+    )
+
+    assert selected["id"] == "AMB-MUM-LOCAL"
+    assert tier == "heuristic"
+
+
+def test_predict_with_fallback_reports_static_tier_when_heuristic_cannot_score() -> None:
+    selected, tier = predict_with_fallback(
+        [ambulance("AMB-MUM-LOCAL", "Mumbai", readiness=0.8)],
+        INCIDENT_MUMBAI,
+        [],
+    )
+
+    assert selected["id"] == "AMB-MUM-LOCAL"
+    assert tier == "static"
 
 
 def test_dispatch_escalates_when_same_city_hospitals_are_full(monkeypatch) -> None:

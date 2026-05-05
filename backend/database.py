@@ -390,6 +390,7 @@ CREATE TABLE IF NOT EXISTS dispatch_plans (
     created_at TEXT NOT NULL,
     status TEXT NOT NULL,
     baseline_eta_minutes REAL,
+    dispatch_tier TEXT NOT NULL DEFAULT 'heuristic',
     overload_avoided INTEGER NOT NULL DEFAULT 0,
     override_id TEXT
 );
@@ -518,6 +519,8 @@ async def _apply_sqlite_compat_migrations(connection: aiosqlite.Connection) -> N
     dispatch_columns = {str(row["name"]) for row in await cursor.fetchall()}
     if "override_id" not in dispatch_columns:
         await connection.execute("ALTER TABLE dispatch_plans ADD COLUMN override_id TEXT")
+    if "dispatch_tier" not in dispatch_columns:
+        await connection.execute("ALTER TABLE dispatch_plans ADD COLUMN dispatch_tier TEXT NOT NULL DEFAULT 'heuristic'")
 
     cursor = await connection.execute("PRAGMA table_info(incidents)")
     incident_columns = {str(row["name"]) for row in await cursor.fetchall()}

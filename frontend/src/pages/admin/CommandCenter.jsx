@@ -5,8 +5,6 @@ import {
   AlertCircle,
   AlertTriangle,
   Ambulance,
-  ChevronDown,
-  ChevronRight,
   Globe,
   Languages,
   ShieldAlert,
@@ -15,6 +13,7 @@ import {
 } from 'lucide-react'
 
 import useDispatchStore from '../../store/dispatchStore'
+import ExplainabilityPanel from '../../admin/subcomponents/ExplainabilityPanel'
 import OverridePanel from '../../components/OverridePanel'
 import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
@@ -518,57 +517,16 @@ export default function CommandCenter() {
                 </Card>
               ) : null}
 
-              <Card className="mt-3">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  AI Explanation
-                </p>
-                <p
-                  className={clsx(
-                    'mt-3 text-sm leading-6 text-slate-300',
-                    !explExpanded && 'line-clamp-2'
-                  )}
-                >
-                  {dispatchPlan?.explanation_text || 'AI routing analysis will appear here.'}
-                </p>
-                {translationOriginalComplaint && translationLanguageName ? (
-                  <div className="mt-4 rounded-xl border border-border bg-slate-900/80 p-3">
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between gap-3 text-left"
-                      onClick={() => setTranslationExpanded((current) => !current)}
-                    >
-                      <span className="text-xs font-medium text-slate-300">
-                        Show original ({translationLanguageName})
-                      </span>
-                      {translationExpanded ? (
-                        <ChevronDown size={14} className="text-slate-500" />
-                      ) : (
-                        <ChevronRight size={14} className="text-slate-500" />
-                      )}
-                    </button>
-                    {translationExpanded ? (
-                      <div className="mt-3 space-y-2">
-                        <p className="rounded-lg bg-slate-950 p-2 text-xs italic leading-5 text-slate-400">
-                          {translationOriginalComplaint}
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                          {translationModel
-                            ? `Translated using Helsinki-NLP Opus-MT (offline) via ${translationModel}`
-                            : 'Translated using Helsinki-NLP Opus-MT (offline)'}
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                <Button
-                  className="mt-3"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setExplExpanded((e) => !e)}
-                >
-                  {explExpanded ? 'Show less' : 'Show more'}
-                </Button>
-              </Card>
+              <ExplainabilityPanel
+                dispatch={dispatchPlan}
+                expanded={explExpanded}
+                onToggleExpanded={() => setExplExpanded((e) => !e)}
+                translationOriginalComplaint={translationOriginalComplaint}
+                translationLanguageName={translationLanguageName}
+                translationModel={translationModel}
+                translationExpanded={translationExpanded}
+                onToggleTranslation={() => setTranslationExpanded((current) => !current)}
+              />
 
               <Card className="mt-3">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">

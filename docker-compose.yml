@@ -1,42 +1,19 @@
-version: "3.8"
-
+version: '3.9'
 services:
   backend:
-    build: .
-    ports:
-      - "8000:8000"
+    build: ./backend
+    ports: ["8000:8000"]
     environment:
-      DATABASE_URL: postgresql+asyncpg://raid:raid@db/raids_vihan
-      ENVIRONMENT: development
-      SECRET_KEY: dev-secret-key
-    depends_on:
-      db:
-        condition: service_healthy
+      - DATABASE_URL=sqlite:///./raid_nexus.db
+      - CORS_ORIGINS=http://localhost:3000
+    volumes: ["./backend:/app"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
-
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: raid
-      POSTGRES_PASSWORD: raid
-      POSTGRES_DB: raids_vihan
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U raid"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  postgres_data:
+    build: ./frontend
+    ports: ["3000:80"]
+    depends_on: [backend]

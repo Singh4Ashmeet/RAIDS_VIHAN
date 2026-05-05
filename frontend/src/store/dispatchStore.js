@@ -3,6 +3,9 @@ import api, { WS_ROOT } from '../services/api'
 import { mockAmbulances, mockHospitals, mockIncidents } from '../services/mockData'
 import useAuthStore from './authStore'
 
+let _retryDelay = 2000
+const MAX_DELAY = 30000
+
 function normalizeDispatch(plan) {
   if (!plan) return null
   if (typeof plan === 'object' && plan !== null && 'status' in plan) return plan
@@ -383,6 +386,7 @@ const useDispatchStore = create((set, get) => ({
       clearReconnectTimer()
       const token = useAuthStore.getState().token
       if (!token) {
+        _retryDelay = 2000
         set({ wsStatus: 'disconnected', _ws: null, _wsReconnectAttempts: 0 })
         return
       }
@@ -391,10 +395,14 @@ const useDispatchStore = create((set, get) => ({
         ? `${WS_ROOT}/ws/live${token ? `?token=${encodeURIComponent(token)}` : ''}`
         : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/live${token ? `?token=${encodeURIComponent(token)}` : ''}`
       const ws = new WebSocket(wsUrl)
-      ws.onopen  = () => set({ wsStatus: 'connected', _ws: ws, _wsReconnectAttempts: 0 })
+      ws.onopen  = () => {
+        _retryDelay = 2000
+        set({ wsStatus: 'connected', _ws: ws, _wsReconnectAttempts: 0 })
+      }
       ws.onclose = (event) => {
         set({ wsStatus: 'disconnected', _ws: null })
         if (event.code === 1008) {
+          _retryDelay = 2000
           useAuthStore.getState().logout()
           return
         }
@@ -404,8 +412,8 @@ const useDispatchStore = create((set, get) => ({
           set({ wsStatus: 'failed', _wsReconnectAttempts: attempts })
           return
         }
-        const delay = Math.min(30000, 1000 * (2 ** Math.min(attempts - 1, 4)))
-        const timer = setTimeout(connect, delay)
+        const timer = setTimeout(connect, _retryDelay)
+        _retryDelay = Math.min(_retryDelay * 1.5, MAX_DELAY)
         set({ _wsReconnectAttempts: attempts, _wsReconnectTimer: timer })
       }
       ws.onerror = () => ws.close()
@@ -572,6 +580,7 @@ const useDispatchStore = create((set, get) => ({
   disconnectWS: () => {
     const timer = get()._wsReconnectTimer
     if (timer) clearTimeout(timer)
+    _retryDelay = 2000
     const ws = get()._ws
     if (ws) {
       ws.onclose = null

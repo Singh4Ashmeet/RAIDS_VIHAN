@@ -42,6 +42,55 @@ _SPECIALTY_ALIASES: dict[str, str] = {
 }
 
 MANUAL_ESCALATION_TEXT = "No feasible same-city dispatch available; manual mutual-aid escalation required."
+MODEL_LOADED = False
+
+
+def ml_predict(ambulances: list[dict[str, Any]], incident: dict[str, Any], hospitals: list[dict[str, Any]]) -> dict[str, Any]:
+    """Placeholder hook for a loaded ML dispatch predictor."""
+
+    _ = (ambulances, incident, hospitals)
+    raise RuntimeError("ML dispatch model is not loaded.")
+
+
+def heuristic_dispatch(
+    ambulances: list[dict[str, Any]],
+    incident: dict[str, Any],
+    hospitals: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Return the deterministic heuristic candidate used by the current scorer."""
+
+    _ = incident
+    available = [ambulance for ambulance in ambulances if ambulance.get("status") == "available"]
+    eligible_hospitals = [hospital for hospital in hospitals if not hospital.get("diversion_status")]
+    if not available or not eligible_hospitals:
+        raise RuntimeError("No deterministic same-city dispatch candidate available.")
+    return max(available, key=lambda ambulance: float(ambulance.get("crew_readiness", 0.0)))
+
+
+def predict_with_fallback(
+    ambulances: list[dict[str, Any]],
+    incident: dict[str, Any],
+    hospitals: list[dict[str, Any]],
+) -> tuple[dict[str, Any], str]:
+    # Tier 1: ML model
+    try:
+        if MODEL_LOADED:
+            return ml_predict(ambulances, incident, hospitals), "ml"
+    except Exception:
+        pass
+
+    # Tier 2: Deterministic heuristic
+    try:
+        return heuristic_dispatch(ambulances, incident, hospitals), "heuristic"
+    except Exception:
+        pass
+
+    # Tier 3: Static rule - first available unit
+    available = [a for a in ambulances if a["status"] == "available"]
+    if available:
+        return available[0], "static"
+
+    raise RuntimeError("No ambulances available")
 
 
 def _normalize_city(value: Any) -> str:
@@ -297,6 +346,7 @@ def _manual_escalation_response(
     service_city: str,
     baseline_eta_minutes: float | None,
     explanation_text: str,
+    dispatch_tier: str = "static",
 ) -> dict[str, Any]:
     return {
         "status": "error",
@@ -305,6 +355,7 @@ def _manual_escalation_response(
         "eta_minutes": 0.0,
         "score_breakdown": None,
         "baseline_eta_minutes": baseline_eta_minutes,
+        "dispatch_tier": dispatch_tier,
         "service_city": service_city,
         "manual_escalation": True,
         "reroute_blocked_reason": MANUAL_ESCALATION_TEXT,
@@ -344,12 +395,17 @@ async def select_dispatch(
         scene_eta_by_ambulance,
         hospital_eta_by_hospital,
     )
+    try:
+        _, dispatch_tier = predict_with_fallback(available_ambulances, incident, eligible_hospitals)
+    except RuntimeError:
+        dispatch_tier = "static"
 
     if not service_city:
         return _manual_escalation_response(
             service_city,
             baseline_eta_minutes,
             "Incident city is unknown, so automatic dispatch is blocked for safety.",
+            dispatch_tier,
         )
 
     if not ambulances or not hospitals or not city_ambulances or not city_hospitals:
@@ -357,6 +413,7 @@ async def select_dispatch(
             service_city,
             baseline_eta_minutes,
             f"{MANUAL_ESCALATION_TEXT} No ambulance or hospital records are available in {service_city}.",
+            dispatch_tier,
         )
 
     if not local_ambulances or not local_hospitals:
@@ -364,6 +421,7 @@ async def select_dispatch(
             service_city,
             baseline_eta_minutes,
             f"{MANUAL_ESCALATION_TEXT} No usable ambulance or hospital coordinates are inside {service_city}.",
+            dispatch_tier,
         )
 
     if not available_ambulances:
@@ -371,6 +429,7 @@ async def select_dispatch(
             service_city,
             baseline_eta_minutes,
             f"{MANUAL_ESCALATION_TEXT} No available ambulance is inside {service_city}.",
+            dispatch_tier,
         )
 
     if not eligible_hospitals:
@@ -381,6 +440,7 @@ async def select_dispatch(
                 service_city,
                 baseline_eta_minutes,
                 f"{MANUAL_ESCALATION_TEXT} Local hospitals in {service_city} are exhausted.",
+                dispatch_tier,
             )
 
         eta_to_scene = scene_eta_by_ambulance.get(fallback_ambulance["id"])
@@ -409,6 +469,7 @@ async def select_dispatch(
             "eta_minutes": round(eta_to_scene + eta_to_hospital, 2),
             "score_breakdown": None,
             "baseline_eta_minutes": baseline_eta_minutes,
+            "dispatch_tier": dispatch_tier,
             "service_city": service_city,
             "manual_escalation": False,
             "explanation_text": (
@@ -455,6 +516,7 @@ async def select_dispatch(
         "eta_minutes": round(best_pair["total_eta_minutes"], 2),
         "score_breakdown": score_breakdown,
         "baseline_eta_minutes": baseline_eta_minutes,
+        "dispatch_tier": dispatch_tier,
         "service_city": service_city,
         "manual_escalation": False,
         "explanation_text": _build_explanation_text(best_pair, incident.get("type", ""), active_weights),

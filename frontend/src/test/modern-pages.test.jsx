@@ -51,6 +51,37 @@ describe('modern routed pages', () => {
     expect(screen.getByText(/review recommended/i)).toBeInTheDocument()
   })
 
+  it('CommandCenter renders structured dispatch explanation details', async () => {
+    resetDispatchStore({
+      lastDispatch: {
+        ...MOCK_DISPATCH,
+        explanation: {
+          selected_reason: 'Nearest ALS unit with highest composite score',
+          score_breakdown: {
+            eta_score: 0.81,
+            capacity_score: 0.72,
+            specialty_score: 1,
+            final_score: 0.91,
+          },
+          rejected_hospitals: [
+            {
+              id: 'HOSP-002',
+              name: 'Safdarjung Hospital',
+              reason: 'Critical capacity pressure',
+            },
+          ],
+        },
+      },
+    })
+
+    renderPage(<CommandCenter />)
+
+    expect(await screen.findByText('Nearest ALS unit with highest composite score')).toBeInTheDocument()
+    expect(screen.getByText('ETA Score')).toBeInTheDocument()
+    expect(screen.getByText('Rejected alternatives:')).toBeInTheDocument()
+    expect(screen.getByText(/Safdarjung Hospital - Critical capacity pressure/)).toBeInTheDocument()
+  })
+
   it('FleetHospitals separates fleet and hospital views', async () => {
     const user = userEvent.setup()
     renderPage(<FleetHospitals />)

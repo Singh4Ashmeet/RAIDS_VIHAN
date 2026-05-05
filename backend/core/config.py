@@ -41,13 +41,13 @@ class Settings(BaseSettings):
 
     BACKEND_PORT: int = 8000
     FRONTEND_PORT: int = 3000
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://raid-nexus.onrender.com",
-    ]
+    CORS_ORIGINS: str = (
+        "http://localhost:3000,"
+        "http://127.0.0.1:3000,"
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173,"
+        "https://raid-nexus.onrender.com"
+    )
     CORS_ORIGIN_REGEX: str = r"^http://(localhost|127\.0\.0\.1):\d+$"
 
     ENABLE_NLP_TRIAGE: bool = True

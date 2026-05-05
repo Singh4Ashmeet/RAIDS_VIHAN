@@ -1,13 +1,16 @@
 """Incident API routes."""
 
-from fastapi import APIRouter, Query, Request, Response, status
+from typing import Any
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from models.incident import Incident, IncidentCreate
 from repositories.incident_repo import IncidentRepository
-from services.dispatch_service import full_dispatch_pipeline
+from schemas.scenario import IncidentRequest
+from services.dispatch_service import full_dispatch_pipeline, save_dispatch_bg
 from simulation.incident_sim import build_incident_payload, create_incident
-from core.response import fallback, success, unwrap_envelope
+from core.response import error, fallback, success, unwrap_envelope
 
 try:
     from core.security import limiter, sanitize_text_field, validate_incident_type, validate_india_coordinates, validate_severity
@@ -19,14 +22,42 @@ except ModuleNotFoundError:
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
 
+def _location_coordinate(location: dict[str, Any], *keys: str) -> float:
+    for key in keys:
+        if key in location:
+            try:
+                return float(location[key])
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(status_code=422, detail=f"Invalid location value for '{key}'.") from exc
+    raise HTTPException(status_code=422, detail=f"Location must include one of: {', '.join(keys)}.")
+
+
+def _incident_create_from_request(payload: IncidentRequest) -> IncidentCreate:
+    lat = _location_coordinate(payload.location, "lat", "latitude", "location_lat")
+    lng = _location_coordinate(payload.location, "lng", "lon", "longitude", "location_lng")
+    return IncidentCreate(
+        type="other",
+        severity=payload.severity,
+        patient_count=1,
+        location_lat=lat,
+        location_lng=lng,
+        city=payload.city,
+        description=f"{payload.severity} emergency in {payload.city}",
+    )
+
+
 @router.post("", response_model=None, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def create_manual_incident(
-    payload: IncidentCreate,
+    payload: IncidentCreate | IncidentRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
 ) -> dict[str, object] | JSONResponse:
     """Create an incident and immediately run the dispatch pipeline."""
+
+    if isinstance(payload, IncidentRequest):
+        payload = _incident_create_from_request(payload)
 
     validate_india_coordinates(payload.location_lat, payload.location_lng)
     incident_type = validate_incident_type(payload.type)
@@ -75,12 +106,21 @@ async def create_manual_incident(
             }
         )
 
-    dispatch_result = await full_dispatch_pipeline(str(incident_payload["id"]), payload.patient_id)
+    dispatch_result = await full_dispatch_pipeline(
+        str(incident_payload["id"]),
+        payload.patient_id,
+        persist_dispatch=False,
+    )
     if isinstance(dispatch_result, JSONResponse):
         return dispatch_result
 
     dispatch_payload, dispatch_status, dispatch_message = unwrap_envelope(dispatch_result)
+    if dispatch_status == "error":
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return error(dispatch_message or "Dispatch failed", code=status.HTTP_500_INTERNAL_SERVER_ERROR)
     dispatch_plan = dispatch_payload if isinstance(dispatch_payload, dict) else dispatch_result
+    if isinstance(dispatch_plan, dict):
+        background_tasks.add_task(save_dispatch_bg, dispatch_plan)
     if dispatch_status == "fallback":
         response.status_code = status.HTTP_207_MULTI_STATUS
     else:

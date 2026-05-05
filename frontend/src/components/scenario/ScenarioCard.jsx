@@ -170,6 +170,8 @@ export default function ScenarioCard({
     try {
       const result = await triggerScenario(type)
       const plan = result?.dispatch_plan
+        ? { ...result.dispatch_plan, explanation: result.explanation }
+        : null
 
       clearCountdown()
 

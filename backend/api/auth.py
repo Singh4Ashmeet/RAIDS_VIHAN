@@ -100,7 +100,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         role=str(user["role"]),
         username=str(user["username"]),
     )
-    return token.model_dump()
+    return success(token.model_dump())
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:

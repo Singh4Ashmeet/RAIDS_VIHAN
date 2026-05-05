@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,5 +38,6 @@ class DispatchPlan(BaseModel):
     created_at: datetime
     status: str
     baseline_eta_minutes: float | None = None
+    dispatch_tier: Literal["ml", "heuristic", "static"] = "heuristic"
     overload_avoided: bool = False
     override_id: str | None = None

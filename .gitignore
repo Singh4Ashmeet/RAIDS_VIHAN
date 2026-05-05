@@ -26,6 +26,7 @@ backend/venv/
 # Environment files
 .env
 .env.*
+!.env.example
 !backend/.env.example
 
 # Local databases and runtime artifacts
@@ -48,6 +49,9 @@ frontend/coverage/
 
 # Test outputs
 coverage/
+
+# Optional native scaffolds
+optimizer_cpp/build/
 
 # Local temporary files
 *.tmp

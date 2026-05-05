@@ -26,6 +26,45 @@ USE_GRAPH_PIPELINE = os.getenv("RAID_NEXUS_USE_GRAPH_PIPELINE", "").lower() in {
 logger = logging.getLogger(__name__)
 
 
+def dispatch_record_payload(dispatch_plan: dict[str, Any]) -> dict[str, Any]:
+    """Return the durable dispatch record fields persisted for analytics."""
+
+    return {
+        "id": dispatch_plan["id"],
+        "incident_id": dispatch_plan["incident_id"],
+        "patient_id": dispatch_plan["patient_id"],
+        "ambulance_id": dispatch_plan["ambulance_id"],
+        "hospital_id": dispatch_plan["hospital_id"],
+        "ambulance_score": dispatch_plan["ambulance_score"],
+        "hospital_score": dispatch_plan["hospital_score"],
+        "route_score": dispatch_plan["route_score"],
+        "final_score": dispatch_plan["final_score"],
+        "eta_minutes": dispatch_plan["eta_minutes"],
+        "distance_km": dispatch_plan["distance_km"],
+        "rejected_ambulances": dispatch_plan["rejected_ambulances"],
+        "rejected_hospitals": dispatch_plan["rejected_hospitals"],
+        "explanation_text": dispatch_plan["explanation_text"],
+        "fallback_hospital_id": dispatch_plan["fallback_hospital_id"],
+        "created_at": dispatch_plan["created_at"],
+        "status": dispatch_plan["status"],
+        "baseline_eta_minutes": dispatch_plan["baseline_eta_minutes"],
+        "dispatch_tier": dispatch_plan.get("dispatch_tier", "heuristic"),
+        "overload_avoided": dispatch_plan["overload_avoided"],
+        "override_id": dispatch_plan["override_id"],
+    }
+
+
+async def save_dispatch_bg(plan: dict[str, Any]) -> None:
+    """Persist a dispatch decision outside the request response path."""
+
+    try:
+        if await DispatchRepository().get_by_id(str(plan["id"])) is not None:
+            return
+        await DispatchRepository().create(dispatch_record_payload(plan))
+    except Exception as exc:
+        logger.warning("Background dispatch persistence failed for %s: %s", plan.get("id"), exc)
+
+
 def _dispatch_created_payload(dispatch_plan: dict[str, Any]) -> dict[str, Any]:
     """Return the trimmed dispatch payload pushed to live clients."""
 
@@ -45,6 +84,7 @@ def _dispatch_created_payload(dispatch_plan: dict[str, Any]) -> dict[str, Any]:
             "created_at": dispatch_plan["created_at"],
             "traffic_multiplier": dispatch_plan["traffic_multiplier"],
             "city": dispatch_plan["city"],
+            "dispatch_tier": dispatch_plan.get("dispatch_tier", "heuristic"),
             "audit_id": dispatch_plan.get("audit_id"),
             "override_id": dispatch_plan.get("override_id"),
             "requires_human_review": dispatch_plan.get("requires_human_review", False),
@@ -70,7 +110,12 @@ async def _dispatch_traffic_context(incident: dict[str, Any], hospital: dict[str
     return round(multiplier, 2), city
 
 
-async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None) -> Any:
+async def full_dispatch_pipeline(
+    incident_id: str,
+    patient_id: str | None = None,
+    *,
+    persist_dispatch: bool = True,
+) -> Any:
     """Run the complete dispatch lifecycle for an incident."""
 
     try:
@@ -200,6 +245,7 @@ async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None
             "override_id": None,
             "traffic_multiplier": traffic_multiplier,
             "city": traffic_city,
+            "dispatch_tier": selection.get("dispatch_tier", "heuristic"),
             "requires_human_review": bool(triage.get("requires_human_review", False)),
             "review_reason": triage.get("review_reason"),
             "triage_confidence": triage.get("triage_confidence"),
@@ -214,30 +260,8 @@ async def full_dispatch_pipeline(incident_id: str, patient_id: str | None = None
         if patient is not None:
             await notify_hospital(hospital["id"], patient, dispatch_plan, ambulance)
 
-        await dispatch_repo.create(
-            {
-                "id": dispatch_plan["id"],
-                "incident_id": dispatch_plan["incident_id"],
-                "patient_id": dispatch_plan["patient_id"],
-                "ambulance_id": dispatch_plan["ambulance_id"],
-                "hospital_id": dispatch_plan["hospital_id"],
-                "ambulance_score": dispatch_plan["ambulance_score"],
-                "hospital_score": dispatch_plan["hospital_score"],
-                "route_score": dispatch_plan["route_score"],
-                "final_score": dispatch_plan["final_score"],
-                "eta_minutes": dispatch_plan["eta_minutes"],
-                "distance_km": dispatch_plan["distance_km"],
-                "rejected_ambulances": dispatch_plan["rejected_ambulances"],
-                "rejected_hospitals": dispatch_plan["rejected_hospitals"],
-                "explanation_text": dispatch_plan["explanation_text"],
-                "fallback_hospital_id": dispatch_plan["fallback_hospital_id"],
-                "created_at": dispatch_plan["created_at"],
-                "status": dispatch_plan["status"],
-                "baseline_eta_minutes": dispatch_plan["baseline_eta_minutes"],
-                "overload_avoided": dispatch_plan["overload_avoided"],
-                "override_id": dispatch_plan["override_id"],
-            },
-        )
+        if persist_dispatch:
+            await dispatch_repo.create(dispatch_record_payload(dispatch_plan))
         try:
             audit_id = await log_ai_dispatch(dispatch_plan, incident, actor_id="system")
         except Exception as exc:

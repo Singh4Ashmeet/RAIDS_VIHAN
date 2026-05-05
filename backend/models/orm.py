@@ -142,6 +142,7 @@ class DispatchPlan(Base):
     created_at: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, index=True)
     baseline_eta_minutes: Mapped[float] = mapped_column(Float, nullable=True)
+    dispatch_tier: Mapped[str] = mapped_column(String, default="heuristic")
     overload_avoided: Mapped[bool] = mapped_column(Boolean, default=False)
     override_id: Mapped[str] = mapped_column(String, nullable=True)
 

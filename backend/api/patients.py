@@ -1,9 +1,10 @@
 """Patient intake API routes."""
 
 from __future__ import annotations
+from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from core.config import isoformat_utc
@@ -11,7 +12,8 @@ from repositories.ambulance_repo import AmbulanceRepository
 from repositories.hospital_repo import HospitalRepository
 from repositories.patient_repo import PatientRepository
 from models.patient import Patient, PatientCreate, PatientDetailResponse
-from services.dispatch_service import full_dispatch_pipeline
+from schemas.scenario import PatientRequest
+from services.dispatch_service import full_dispatch_pipeline, save_dispatch_bg
 from services.geo_service import nearest_city
 from services.nlp_triage import triage_incident
 from simulation.incident_sim import build_incident_payload, create_incident
@@ -27,15 +29,44 @@ except ModuleNotFoundError:
 router = APIRouter(prefix="/patients", tags=["patients"])
 
 
+def _location_coordinate(location: dict[str, Any], *keys: str) -> float:
+    for key in keys:
+        if key in location:
+            try:
+                return float(location[key])
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(status_code=422, detail=f"Invalid location value for '{key}'.") from exc
+    raise HTTPException(status_code=422, detail=f"Location must include one of: {', '.join(keys)}.")
+
+
+def _patient_create_from_request(payload: PatientRequest) -> PatientCreate:
+    lat = _location_coordinate(payload.location, "lat", "latitude", "location_lat")
+    lng = _location_coordinate(payload.location, "lng", "lon", "longitude", "location_lng")
+    return PatientCreate(
+        name=payload.name,
+        age=payload.age,
+        gender="other",
+        mobile="unknown",
+        location_lat=lat,
+        location_lng=lng,
+        chief_complaint=f"{payload.severity} emergency in {payload.city}",
+        sos_mode=True,
+    )
+
+
 @router.post("", response_model=None, status_code=status.HTTP_201_CREATED)
 async def create_patient(
-    payload: PatientCreate,
+    payload: PatientCreate | PatientRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
 ) -> dict[str, object] | JSONResponse:
     """Create a patient, derive incident details, and trigger dispatch."""
 
     try:
+        if isinstance(payload, PatientRequest):
+            payload = _patient_create_from_request(payload)
+
         validate_india_coordinates(payload.location_lat, payload.location_lng)
         chief_complaint = sanitize_text_field(payload.chief_complaint, max_length=1000)
         city = await nearest_city(payload.location_lat, payload.location_lng)
@@ -100,16 +131,26 @@ async def create_patient(
                     "incident_id": incident_payload["id"],
                 }
             )
-        dispatch_result = await full_dispatch_pipeline(str(incident_payload["id"]), str(patient_payload["id"]))
+        dispatch_result = await full_dispatch_pipeline(
+            str(incident_payload["id"]),
+            str(patient_payload["id"]),
+            persist_dispatch=False,
+        )
         if isinstance(dispatch_result, JSONResponse):
             return dispatch_result
 
         patient_record = await patient_repo.get_by_id(str(patient_payload["id"]))
         if patient_record is None:
+            response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
             return error("Created patient could not be reloaded.", code=500)
 
         dispatch_payload, dispatch_status, dispatch_message = unwrap_envelope(dispatch_result)
+        if dispatch_status == "error":
+            response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+            return error(dispatch_message or "Dispatch failed", code=status.HTTP_500_INTERNAL_SERVER_ERROR)
         dispatch_plan = dispatch_payload if isinstance(dispatch_payload, dict) else dispatch_result
+        if isinstance(dispatch_plan, dict):
+            background_tasks.add_task(save_dispatch_bg, dispatch_plan)
         patient_data = Patient.model_validate(patient_record).model_dump(mode="json")
         response_payload = {
             "patient": patient_data,
@@ -131,7 +172,9 @@ async def create_patient(
         if isinstance(exc, HTTPException):
             raise
         if isinstance(exc, ValueError):
+            response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
             return error(str(exc), code=500)
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return error(str(exc), code=500)
 
 

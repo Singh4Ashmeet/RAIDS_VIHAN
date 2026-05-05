@@ -13,11 +13,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -45,10 +44,11 @@ from repositories.hospital_repo import HospitalRepository
 from repositories.incident_repo import IncidentRepository
 from repositories.patient_repo import PatientRepository
 from core.security import limiter
+from schemas.scenario import DispatchRequest as BaseDispatchRequest
 from services.anomaly_detector import get_recent_anomalies, get_total_detected
 from services.demand_predictor import CITY_BOUNDING_BOXES, build_density_grid, predict_demand, recommend_preposition
 from services.dispatch import select_dispatch
-from services.dispatch_service import full_dispatch_pipeline
+from services.dispatch_service import full_dispatch_pipeline, save_dispatch_bg
 from services.nlp_triage import triage_incident
 from services.offline_translator import get_translation_status
 from simulation.engine import SimulationEngine
@@ -126,11 +126,67 @@ class TimingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class DispatchRequest(BaseModel):
+class DispatchRequest(BaseDispatchRequest):
     """Manual dispatch trigger request."""
 
-    incident_id: str
     patient_id: str | None = None
+
+
+def _format_api_message(detail: Any, fallback: str = "Request failed") -> str:
+    """Return a compact string message for arbitrary FastAPI error details."""
+
+    if detail is None:
+        return fallback
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, list):
+        messages = [_format_api_message(item, "") for item in detail]
+        return "; ".join(message for message in messages if message) or fallback
+    if isinstance(detail, dict):
+        if "detail" in detail:
+            return _format_api_message(detail["detail"], fallback)
+        message = detail.get("message") or detail.get("msg")
+        if message:
+            location = detail.get("loc")
+            if isinstance(location, list):
+                path = ".".join(str(part) for part in location if part != "body")
+                return f"{path}: {message}" if path else str(message)
+            return str(message)
+        try:
+            return json.dumps(detail, default=str)
+        except TypeError:
+            return fallback
+    return str(detail)
+
+
+def _parse_cors_origins(value: str) -> list[str]:
+    """Parse CORS origins from comma-separated or JSON-list configuration."""
+
+    raw_value = value.strip()
+    if not raw_value:
+        return []
+    if raw_value.startswith("["):
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            return [str(origin).strip() for origin in parsed if str(origin).strip()]
+    return [origin.strip() for origin in raw_value.split(",") if origin.strip()]
+
+
+def _cors_origins() -> list[str]:
+    """Return allowed CORS origins, honoring comma-separated env overrides."""
+
+    return _parse_cors_origins(os.getenv("CORS_ORIGINS") or settings.CORS_ORIGINS)
+
+
+def _cors_origin_regex() -> str | None:
+    """Keep the development regex only when origins are not explicitly set."""
+
+    if os.getenv("CORS_ORIGINS"):
+        return None
+    return settings.CORS_ORIGIN_REGEX or None
 
 
 async def health() -> dict[str, Any]:
@@ -139,6 +195,8 @@ async def health() -> dict[str, Any]:
     translation_status = await get_translation_status()
     return {
         "status": "ok",
+        "service": "RAID Nexus",
+        "version": "1.0.0",
         "timestamp": isoformat_utc(),
         "services": {
             "translation": "ok" if translation_status["model_count"] > 0 else "idle (loads on first use)",
@@ -157,20 +215,16 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
     """Return friendly JSON responses for throttled endpoints."""
 
     if request.url.path == "/api/incidents":
-        return JSONResponse(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={
-                "detail": (
-                    "Too many requests. Emergency services have been notified. "
-                    "If this is a real emergency please call 112."
-                )
-            },
+        message = (
+            "Too many requests. Emergency services have been notified. "
+            "If this is a real emergency please call 112."
         )
-
-    default_response = _rate_limit_exceeded_handler(request, exc)
-    if asyncio.iscoroutine(default_response):
-        return await default_response
-    return default_response
+    else:
+        message = _format_api_message(getattr(exc, "detail", None), "Rate limit exceeded")
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content=error(message, code=status.HTTP_429_TOO_MANY_REQUESTS),
+    )
 
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -179,7 +233,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     logger.error("Unhandled error on %s: %s", request.url.path, exc, exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"status": "error", "message": "Internal server error", "data": None},
+        content={"status": "error", "message": str(exc), "data": None},
     )
 
 
@@ -189,8 +243,21 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     _ = request
     return JSONResponse(
         status_code=exc.status_code,
-        content={"status": "error", "message": exc.detail, "data": None},
+        content=error(_format_api_message(exc.detail, "HTTP error"), code=exc.status_code),
         headers=getattr(exc, "headers", None),
+    )
+
+
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Return request validation errors in the standard envelope."""
+
+    _ = request
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=error(
+            _format_api_message(exc.errors(), "Validation error"),
+            code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ),
     )
 
 
@@ -203,11 +270,8 @@ async def benchmark_results() -> JSONResponse:
 
     if not BENCHMARK_RESULTS_FILE.is_file():
         return JSONResponse(
-            content={
-                "status": "error",
-                "message": "Benchmark not run yet",
-                "data": {"run_command": "python backend/scripts/benchmark.py --split test"},
-            },
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=error("Benchmark not run yet", code=status.HTTP_404_NOT_FOUND),
             media_type="application/json",
         )
 
@@ -222,11 +286,8 @@ async def fairness_results(_admin: Any = Depends(get_current_admin)) -> JSONResp
     _ = _admin
     if not BENCHMARK_RESULTS_FILE.is_file():
         return JSONResponse(
-            content={
-                "status": "error",
-                "message": "Run benchmark first",
-                "data": {"command": "python backend/scripts/benchmark.py --split test"},
-            },
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=error("Run benchmark first", code=status.HTTP_404_NOT_FOUND),
             media_type="application/json",
         )
 
@@ -234,11 +295,8 @@ async def fairness_results(_admin: Any = Depends(get_current_admin)) -> JSONResp
     fairness = payload.get("fairness")
     if fairness is None:
         return JSONResponse(
-            content={
-                "status": "error",
-                "message": "Run benchmark first",
-                "data": {"command": "python backend/scripts/benchmark.py --split test"},
-            },
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=error("Run benchmark first", code=status.HTTP_404_NOT_FOUND),
             media_type="application/json",
         )
 
@@ -252,15 +310,7 @@ async def literature_comparison_results(_admin: Any = Depends(get_current_admin)
     if not LITERATURE_COMPARISON_FILE.is_file():
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "status": "error",
-                "message": "Literature comparison not generated yet",
-                "data": {"run_commands": [
-                    "python backend/scripts/benchmark.py --split test",
-                    "python backend/scripts/benchmark.py --mode cross_city",
-                    "python backend/scripts/literature_comparison.py",
-                ]},
-            },
+            content=error("Literature comparison not generated yet", code=status.HTTP_404_NOT_FOUND),
             media_type="application/json",
         )
 
@@ -370,7 +420,11 @@ async def favicon() -> Response:
     )
 
 
-async def trigger_dispatch(payload: DispatchRequest, response: Response) -> dict[str, Any] | JSONResponse:
+async def trigger_dispatch(
+    payload: DispatchRequest,
+    response: Response,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any] | JSONResponse:
     """Select and execute a dispatch using the formal multi-objective scorer."""
 
     incident = await IncidentRepository().get_by_id(payload.incident_id)
@@ -397,13 +451,21 @@ async def trigger_dispatch(payload: DispatchRequest, response: Response) -> dict
         hospitals,
     )
     if selection_preview["status"] == "error":
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return error(selection_preview["explanation_text"], code=500)
 
-    dispatch_result = await full_dispatch_pipeline(payload.incident_id, payload.patient_id)
+    dispatch_result = await full_dispatch_pipeline(
+        payload.incident_id,
+        payload.patient_id,
+        persist_dispatch=False,
+    )
     if isinstance(dispatch_result, JSONResponse):
         return dispatch_result
 
     dispatch_payload, dispatch_status, dispatch_message = unwrap_envelope(dispatch_result)
+    if dispatch_status == "error":
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return error(dispatch_message or "Dispatch failed", code=status.HTTP_500_INTERNAL_SERVER_ERROR)
     dispatch_plan = dispatch_payload if isinstance(dispatch_payload, dict) else dispatch_result
     if isinstance(dispatch_plan, dict):
         dispatch_plan["ambulance_id"] = selection_preview["ambulance_id"]
@@ -412,6 +474,8 @@ async def trigger_dispatch(payload: DispatchRequest, response: Response) -> dict
         dispatch_plan["score_breakdown"] = selection_preview["score_breakdown"]
         dispatch_plan["baseline_eta_minutes"] = selection_preview["baseline_eta_minutes"]
         dispatch_plan["explanation_text"] = selection_preview["explanation_text"]
+        dispatch_plan["dispatch_tier"] = selection_preview.get("dispatch_tier", dispatch_plan.get("dispatch_tier", "heuristic"))
+        background_tasks.add_task(save_dispatch_bg, dispatch_plan)
 
     if dispatch_status == "fallback" or selection_preview["status"] == "fallback":
         response.status_code = status.HTTP_207_MULTI_STATUS
@@ -516,8 +580,8 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
-        allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
+        allow_origins=_cors_origins(),
+        allow_origin_regex=_cors_origin_regex(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -526,6 +590,7 @@ def create_app() -> FastAPI:
     application.state.limiter = limiter
     application.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
     application.add_exception_handler(HTTPException, http_exception_handler)
+    application.add_exception_handler(RequestValidationError, validation_exception_handler)
     application.add_exception_handler(Exception, global_exception_handler)
 
     application.include_router(websocket_router)
