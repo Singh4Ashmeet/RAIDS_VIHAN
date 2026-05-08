@@ -8,7 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from agents.graph import run_dispatch_pipeline as _graph_run
-from core.config import isoformat_utc
+from core.config import isoformat_utc, settings
 from repositories.ambulance_repo import AmbulanceRepository
 from repositories.dispatch_repo import DispatchRepository
 from repositories.hospital_repo import HospitalRepository
@@ -17,6 +17,7 @@ from repositories.patient_repo import PatientRepository
 from services.analytics_service import build_analytics_snapshot, broadcast_score_update
 from services.audit_service import log_ai_dispatch
 from services.dispatch import select_dispatch
+from services.dispatch_engine import ExplanationGenerator
 from services.nlp_triage import triage_incident
 from services.notification_service import notify_hospital
 from services.traffic import get_traffic_multiplier
@@ -24,6 +25,7 @@ from core.response import error, fallback, success
 
 USE_GRAPH_PIPELINE = os.getenv("RAID_NEXUS_USE_GRAPH_PIPELINE", "").lower() in {"1", "true", "yes"}
 logger = logging.getLogger(__name__)
+_EXPLANATION_GENERATOR = ExplanationGenerator()
 
 
 def dispatch_record_payload(dispatch_plan: dict[str, Any]) -> dict[str, Any]:
@@ -54,6 +56,60 @@ def dispatch_record_payload(dispatch_plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _rejected_candidates(
+    ambulances: list[dict[str, Any]],
+    hospitals: list[dict[str, Any]],
+    selection: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return concise rejected-candidate reasons for structured explanations."""
+
+    selected_ambulance_id = selection.get("ambulance_id")
+    selected_hospital_id = selection.get("hospital_id")
+    rejected: list[dict[str, Any]] = []
+    for ambulance in ambulances:
+        if ambulance.get("id") == selected_ambulance_id:
+            continue
+        status = ambulance.get("status")
+        if status != "available":
+            rejected.append({"id": ambulance.get("id"), "reason": f"status={status or 'unknown'}"})
+        elif len(rejected) < 3:
+            rejected.append({"id": ambulance.get("id"), "reason": "lower composite dispatch score"})
+        if len(rejected) >= 3:
+            break
+    for hospital in hospitals:
+        if hospital.get("id") == selected_hospital_id:
+            continue
+        if hospital.get("diversion_status"):
+            rejected.append({"id": hospital.get("id"), "reason": "on diversion"})
+        elif float(hospital.get("occupancy_pct") or 0.0) >= 95.0:
+            rejected.append({"id": hospital.get("id"), "reason": "capacity pressure"})
+        if len(rejected) >= 5:
+            break
+    return rejected
+
+
+def structured_dispatch_explanation(
+    dispatch_plan: dict[str, Any],
+    ambulance: dict[str, Any] | None,
+    hospital: dict[str, Any] | None,
+    selection: dict[str, Any] | None = None,
+    *,
+    ambulances: list[dict[str, Any]] | None = None,
+    hospitals: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the stable explanation object returned with dispatch responses."""
+
+    active_selection = selection or dispatch_plan
+    rejected = _rejected_candidates(ambulances or [], hospitals or [], active_selection)
+    return _EXPLANATION_GENERATOR.explain({
+        **dispatch_plan,
+        "ambulance": ambulance or {"id": dispatch_plan.get("ambulance_id")},
+        "hospital": hospital or {"id": dispatch_plan.get("hospital_id")},
+        "score_breakdown": dispatch_plan.get("score_breakdown"),
+        "rejected": rejected,
+    })
+
+
 async def save_dispatch_bg(plan: dict[str, Any]) -> None:
     """Persist a dispatch decision outside the request response path."""
 
@@ -81,6 +137,7 @@ def _dispatch_created_payload(dispatch_plan: dict[str, Any]) -> dict[str, Any]:
             "score_breakdown": dispatch_plan["score_breakdown"],
             "baseline_eta_minutes": dispatch_plan["baseline_eta_minutes"],
             "explanation_text": dispatch_plan["explanation_text"],
+            "explanation": dispatch_plan.get("explanation"),
             "created_at": dispatch_plan["created_at"],
             "traffic_multiplier": dispatch_plan["traffic_multiplier"],
             "city": dispatch_plan["city"],
@@ -122,8 +179,8 @@ async def full_dispatch_pipeline(
         if USE_GRAPH_PIPELINE:
             try:
                 await _graph_run(incident_id, patient_id)
-            except Exception as e:
-                print(f"[RAID] Graph pipeline failed, using persisted pipeline: {e}")
+            except Exception as exc:
+                logger.warning("Graph pipeline failed, using persisted pipeline: %s", exc)
 
         incident_repo = IncidentRepository()
         patient_repo = PatientRepository()
@@ -268,6 +325,14 @@ async def full_dispatch_pipeline(
             logger.warning("Dispatch audit logging failed for %s: %s", dispatch_plan["id"], exc)
             audit_id = None
         dispatch_plan["audit_id"] = audit_id
+        dispatch_plan["explanation"] = structured_dispatch_explanation(
+            dispatch_plan,
+            ambulance,
+            hospital,
+            selection,
+            ambulances=ambulances,
+            hospitals=hospitals,
+        )
 
         from api.websocket import broadcast_event
         from services.realtime_map import build_dispatch_update_event
@@ -298,6 +363,7 @@ async def full_dispatch_pipeline(
         if selection["status"] == "fallback":
             return fallback(dispatch_plan, "Fallback dispatch")
         return success(dispatch_plan)
-    except Exception as e:
-        print(f"[DISPATCH ERROR] {e}")
-        return error(str(e), code=500)
+    except Exception as exc:
+        logger.error("Dispatch pipeline failed for incident %s: %s", incident_id, exc, exc_info=True)
+        message = "Dispatch failed" if settings.ENVIRONMENT.lower() == "production" else str(exc)
+        return error(message, code=500)

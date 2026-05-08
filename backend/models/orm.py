@@ -182,6 +182,65 @@ class DispatchAuditLog(Base):
     metadata_json: Mapped[str] = mapped_column("metadata", Text, nullable=True)
 
 
+class AIDecision(Base):
+    __tablename__ = "ai_decisions"
+    __table_args__ = (
+        Index("ix_ai_decisions_dispatch_id", "dispatch_id"),
+        Index("ix_ai_decisions_created_at", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    dispatch_id: Mapped[str] = mapped_column(String, index=True)
+    model_used: Mapped[str] = mapped_column(String)
+    explanation_json: Mapped[str] = mapped_column(Text)
+    score_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String, index=True)
+
+
+class ETALog(Base):
+    __tablename__ = "eta_logs"
+    __table_args__ = (
+        Index("ix_eta_logs_dispatch_id", "dispatch_id"),
+        Index("ix_eta_logs_created_at", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    dispatch_id: Mapped[str] = mapped_column(String, index=True)
+    predicted_eta: Mapped[float] = mapped_column(Float)
+    actual_eta: Mapped[float] = mapped_column(Float, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, index=True)
+
+
+class BenchmarkResult(Base):
+    __tablename__ = "benchmark_results"
+    __table_args__ = (
+        Index("ix_benchmark_results_created_at", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    scenario_count: Mapped[int] = mapped_column(Integer)
+    avg_eta: Mapped[float] = mapped_column(Float)
+    accuracy: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[str] = mapped_column(String, index=True)
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+    __table_args__ = (
+        Index("ix_alerts_type", "type"),
+        Index("ix_alerts_severity", "severity"),
+        Index("ix_alerts_resolved", "resolved"),
+        Index("ix_alerts_created_at", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    type: Mapped[str] = mapped_column(String, index=True)
+    message: Mapped[str] = mapped_column(Text)
+    severity: Mapped[str] = mapped_column(String, index=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[str] = mapped_column(String, index=True)
+
+
 class OverrideRequest(Base):
     __tablename__ = "override_requests"
     __table_args__ = (

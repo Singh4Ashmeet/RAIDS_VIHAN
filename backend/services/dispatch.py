@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Optional
 
+from core.config import settings
 from services.geo_service import is_coordinate_in_city, same_city
 from services.routing import get_travel_time
 
@@ -43,13 +46,46 @@ _SPECIALTY_ALIASES: dict[str, str] = {
 
 MANUAL_ESCALATION_TEXT = "No feasible same-city dispatch available; manual mutual-aid escalation required."
 MODEL_LOADED = False
+_MODEL: Any | None = None
+_MODEL_LOAD_ATTEMPTED = False
+
+
+def _load_dispatch_model() -> Any | None:
+    """Load an optional dispatch model from MODEL_PATH if it exposes a safe interface."""
+
+    global MODEL_LOADED, _MODEL, _MODEL_LOAD_ATTEMPTED
+    if _MODEL_LOAD_ATTEMPTED:
+        return _MODEL
+    _MODEL_LOAD_ATTEMPTED = True
+    model_path = os.getenv("MODEL_PATH") or settings.MODEL_PATH
+    if not model_path:
+        return None
+    path = Path(model_path)
+    if not path.is_file():
+        return None
+    try:
+        import joblib
+
+        loaded = joblib.load(path)
+    except Exception:
+        return None
+    if not hasattr(loaded, "predict_dispatch"):
+        return None
+    _MODEL = loaded
+    MODEL_LOADED = True
+    return _MODEL
 
 
 def ml_predict(ambulances: list[dict[str, Any]], incident: dict[str, Any], hospitals: list[dict[str, Any]]) -> dict[str, Any]:
-    """Placeholder hook for a loaded ML dispatch predictor."""
+    """Run an optional loaded ML dispatch predictor."""
 
-    _ = (ambulances, incident, hospitals)
-    raise RuntimeError("ML dispatch model is not loaded.")
+    model = _load_dispatch_model()
+    if model is None:
+        raise RuntimeError("ML dispatch model is not loaded.")
+    prediction = model.predict_dispatch(ambulances=ambulances, incident=incident, hospitals=hospitals)
+    if not isinstance(prediction, dict):
+        raise RuntimeError("ML dispatch model returned an invalid prediction.")
+    return prediction
 
 
 def heuristic_dispatch(
@@ -74,7 +110,7 @@ def predict_with_fallback(
 ) -> tuple[dict[str, Any], str]:
     # Tier 1: ML model
     try:
-        if MODEL_LOADED:
+        if MODEL_LOADED or _load_dispatch_model() is not None:
             return ml_predict(ambulances, incident, hospitals), "ml"
     except Exception:
         pass

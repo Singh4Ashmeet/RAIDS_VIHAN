@@ -103,7 +103,7 @@ json optimize(const json& input) {
                 {"distance_km", distance_km},
                 {"eta_minutes", eta_minutes},
                 {"score", score},
-                {"optimizer", "cpp_placeholder"}};
+                {"optimizer", "cpp_greedy"}};
         }
     }
 
@@ -124,7 +124,7 @@ json optimize(const json& input) {
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
-        std::cerr << "Usage: dispatch_optimizer <input.json>\n";
+        std::cerr << "Usage: raid_optimizer <input.json>\n";
         return 1;
     }
 

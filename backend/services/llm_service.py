@@ -1,10 +1,17 @@
+import logging
 import os
 
 import httpx
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+from core.config import settings
+
+logger = logging.getLogger(__name__)
+
+OLLAMA_BASE_URL = settings.OLLAMA_URL or settings.OLLAMA_BASE_URL
+OLLAMA_URL = f"{OLLAMA_BASE_URL.rstrip('/')}/api/generate"
 MODEL = "mistral"
-ENABLE_OLLAMA = os.getenv("RAID_NEXUS_ENABLE_OLLAMA", "").lower() in {"1", "true", "yes"}
+USE_LLM = settings.USE_LLM or os.getenv("USE_LLM", "").lower() in {"1", "true", "yes"}
+ENABLE_OLLAMA = USE_LLM and os.getenv("RAID_NEXUS_ENABLE_OLLAMA", "").lower() in {"1", "true", "yes"}
 TIMEOUT_SECONDS = 0.75
 
 
@@ -54,7 +61,7 @@ Write only the explanation paragraph. No headers. No bullet points."""
         + (rejected_summary if rejected_summary else "No viable alternatives available.")
     )
 
-    if not ENABLE_OLLAMA:
+    if not USE_LLM or not ENABLE_OLLAMA:
         return fallback_text
 
     try:
@@ -73,7 +80,7 @@ Write only the explanation paragraph. No headers. No bullet points."""
             text = data.get("response", "").strip()
             if text and len(text) > 20:
                 return text
-    except Exception as e:
-        print(f"[RAID] Ollama unavailable: {e}")
+    except Exception as exc:
+        logger.warning("Ollama unavailable; using rule-based explanation: %s", exc)
 
     return fallback_text

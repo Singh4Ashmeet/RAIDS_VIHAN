@@ -31,3 +31,13 @@ Analytics should be checked after multiple dispatches to confirm persisted value
 ## WebSocket Events
 
 The simulator may observe `WS /ws/live`, but it should not depend on WebSocket delivery for correctness checks. Use HTTP responses and `GET /api/analytics` as the durable verification path.
+
+## Minimal Console Scaffold
+
+This folder includes a tiny .NET console project:
+
+- `RaidNexusSimulation.csproj`
+- `Program.cs`
+- `appsettings.json`
+
+It reads `API_BASE_URL` from `appsettings.json`, calls `/health`, then can be extended to run N scenario requests.

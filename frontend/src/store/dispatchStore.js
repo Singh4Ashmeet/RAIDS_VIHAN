@@ -3,8 +3,19 @@ import api, { WS_ROOT } from '../services/api'
 import { mockAmbulances, mockHospitals, mockIncidents } from '../services/mockData'
 import useAuthStore from './authStore'
 
-let _retryDelay = 2000
-const MAX_DELAY = 30000
+let _retryDelay = 1000
+const MAX_DELAY = 16000
+const MAX_RECONNECT_ATTEMPTS = 5
+
+const EVENT_TYPE_BY_EVENT = {
+  INCIDENT_CREATED: 'incident_created',
+  DISPATCH_ASSIGNED: 'dispatch_created',
+  AMBULANCE_UPDATED: 'ambulance_location_update',
+  HOSPITAL_UPDATED: 'hospital_notification',
+  BENCHMARK_UPDATED: 'score_update',
+  HEARTBEAT: 'ping',
+  STATE_SNAPSHOT: 'state_snapshot',
+}
 
 function normalizeDispatch(plan) {
   if (!plan) return null
@@ -386,7 +397,7 @@ const useDispatchStore = create((set, get) => ({
       clearReconnectTimer()
       const token = useAuthStore.getState().token
       if (!token) {
-        _retryDelay = 2000
+        _retryDelay = 1000
         set({ wsStatus: 'disconnected', _ws: null, _wsReconnectAttempts: 0 })
         return
       }
@@ -396,30 +407,43 @@ const useDispatchStore = create((set, get) => ({
         : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/live${token ? `?token=${encodeURIComponent(token)}` : ''}`
       const ws = new WebSocket(wsUrl)
       ws.onopen  = () => {
-        _retryDelay = 2000
+        _retryDelay = 1000
         set({ wsStatus: 'connected', _ws: ws, _wsReconnectAttempts: 0 })
       }
       ws.onclose = (event) => {
         set({ wsStatus: 'disconnected', _ws: null })
         if (event.code === 1008) {
-          _retryDelay = 2000
+          _retryDelay = 1000
           useAuthStore.getState().logout()
           return
         }
         if (get()._wsManualClose) return
         const attempts = get()._wsReconnectAttempts + 1
-        if (attempts > 10) {
+        if (attempts > MAX_RECONNECT_ATTEMPTS) {
           set({ wsStatus: 'failed', _wsReconnectAttempts: attempts })
           return
         }
         const timer = setTimeout(connect, _retryDelay)
-        _retryDelay = Math.min(_retryDelay * 1.5, MAX_DELAY)
+        _retryDelay = Math.min(_retryDelay * 2, MAX_DELAY)
         set({ _wsReconnectAttempts: attempts, _wsReconnectTimer: timer })
       }
       ws.onerror = () => ws.close()
       ws.onmessage = (e) => {
         try {
-          const msg = JSON.parse(e.data)
+          const parsed = JSON.parse(e.data)
+          const msg = parsed.type
+            ? parsed
+            : { ...parsed, type: EVENT_TYPE_BY_EVENT[parsed.event] || parsed.event }
+          if (msg.type === 'ping' || msg.event === 'HEARTBEAT') {
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify({
+                type: 'HEARTBEAT_ACK',
+                event: 'HEARTBEAT_ACK',
+                timestamp: new Date().toISOString(),
+              }))
+            }
+            return
+          }
           if (msg.type === 'state_snapshot' ||
               msg.type === 'simulation_tick') {
             set({
@@ -580,7 +604,7 @@ const useDispatchStore = create((set, get) => ({
   disconnectWS: () => {
     const timer = get()._wsReconnectTimer
     if (timer) clearTimeout(timer)
-    _retryDelay = 2000
+    _retryDelay = 1000
     const ws = get()._ws
     if (ws) {
       ws.onclose = null

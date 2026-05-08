@@ -138,6 +138,18 @@ function coordinatesOf(item, latKey, lngKey) {
   return [lng, lat]
 }
 
+function pointFeature(coordinates, properties) {
+  if (!coordinates) return null
+  return {
+    type: 'Feature',
+    properties,
+    geometry: {
+      type: 'Point',
+      coordinates,
+    },
+  }
+}
+
 function boundsForCoordinates(coordinates) {
   if (!coordinates?.length) return null
   const bounds = new maplibregl.LngLatBounds(coordinates[0], coordinates[0])
@@ -638,29 +650,26 @@ export default function RealtimeDispatchMap({
     updateGeoJsonSource(map, 'old-route', featureCollection([routeFeature(scopedRouteChange?.old_route, 'old')]))
     updateGeoJsonSource(map, 'new-route', featureCollection([routeFeature(scopedRouteChange?.new_route, 'new')]))
 
-    const heatmapFeatures = visibleIncidents.map((incident) => ({
-      type: 'Feature',
-      properties: {
-        weight: severityWeight(incident.severity),
-        severity: incident.severity,
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: [Number(incident.location_lng), Number(incident.location_lat)],
-      },
-    }))
+    const heatmapFeatures = visibleIncidents
+      .map((incident) => pointFeature(
+        coordinatesOf(incident, 'location_lat', 'location_lng'),
+        {
+          weight: severityWeight(incident.severity),
+          severity: incident.severity,
+        }
+      ))
+      .filter(Boolean)
     updateGeoJsonSource(map, 'incident-heatmap', featureCollection(heatmapFeatures))
 
-    const demandFeatures = (demandData?.hotspots || []).slice(0, 20).map((hotspot) => ({
-      type: 'Feature',
-      properties: {
-        demand: Number(hotspot.demand_score || 0),
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: [Number(hotspot.lng), Number(hotspot.lat)],
-      },
-    }))
+    const demandFeatures = (demandData?.hotspots || [])
+      .slice(0, 20)
+      .map((hotspot) => pointFeature(
+        coordinatesOf(hotspot, 'lat', 'lng'),
+        {
+          demand: Number(hotspot.demand_score || 0),
+        }
+      ))
+      .filter(Boolean)
     updateGeoJsonSource(map, 'demand-hotspots', featureCollection(demandFeatures))
   }, [demandData, mapLoaded, scopedActiveRoute, scopedAlternateRoutes, scopedRouteChange, visibleIncidents])
 

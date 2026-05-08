@@ -20,4 +20,4 @@ COPY --from=frontend /app/frontend/dist ./frontend/dist
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "cd backend && if [ \"$ENVIRONMENT\" = \"production\" ]; then alembic upgrade head; fi && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "if [ \"$ENVIRONMENT\" = \"production\" ]; then cd backend && alembic upgrade head && cd /app; fi && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

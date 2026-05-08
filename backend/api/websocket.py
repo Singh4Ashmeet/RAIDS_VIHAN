@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Callable
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -13,6 +12,7 @@ from repositories.hospital_repo import HospitalRepository
 from repositories.incident_repo import IncidentRepository
 from services.geo_service import get_active_traffic_multiplier
 from services.realtime_map import build_dispatch_map_context
+from websocket.manager import ConnectionManager, standard_event_name
 
 try:
     from api.auth import verify_ws_token
@@ -20,8 +20,7 @@ except ModuleNotFoundError:
     from backend.api.auth import verify_ws_token
 
 router = APIRouter()
-_connected_clients: dict[WebSocket, dict[str, Any]] = {}
-_connection_lock = asyncio.Lock()
+websocket_manager = ConnectionManager()
 
 
 async def state_snapshot_payload() -> dict[str, Any]:
@@ -60,17 +59,8 @@ async def _broadcast_to_matching_clients(
     event: dict[str, Any],
     predicate: Callable[[dict[str, Any]], bool] | None = None,
 ) -> None:
-    async with _connection_lock:
-        disconnected: list[WebSocket] = []
-        for websocket, user in _connected_clients.items():
-            if predicate is not None and not predicate(user):
-                continue
-            try:
-                await websocket.send_json(event)
-            except Exception:
-                disconnected.append(websocket)
-        for websocket in disconnected:
-            _connected_clients.pop(websocket, None)
+    event_name = standard_event_name(str(event.get("event") or event.get("type") or "message"))
+    await websocket_manager.broadcast_where(event_name, event, predicate=predicate)
 
 
 async def broadcast_event(event: dict[str, Any]) -> None:
@@ -83,17 +73,6 @@ async def broadcast_admin_event(event: dict[str, Any]) -> None:
     """Broadcast a JSON event only to connected admin clients."""
 
     await _broadcast_to_matching_clients(event, predicate=lambda user: user.get("role") == "admin")
-
-
-async def _send_ping_messages(websocket: WebSocket) -> None:
-    try:
-        while True:
-            await asyncio.sleep(30)
-            await websocket.send_json({"type": "ping"})
-    except WebSocketDisconnect:
-        return
-    except Exception:
-        return
 
 
 @router.get("/ws/live", include_in_schema=False)
@@ -116,21 +95,13 @@ async def live_feed(websocket: WebSocket, token: str | None = Query(default=None
         await websocket.close(code=1008, reason="Unauthorized")
         return
 
-    await websocket.accept()
-    async with _connection_lock:
-        _connected_clients[websocket] = user
-    ping_task = asyncio.create_task(_send_ping_messages(websocket))
+    client_id = f"{user.get('username') or user.get('sub') or 'client'}:{id(websocket)}"
+    await websocket_manager.connect(websocket, client_id, user)
     try:
-        await websocket.send_json(await state_snapshot_payload())
+        await websocket_manager.send_personal(client_id, "STATE_SNAPSHOT", await state_snapshot_payload())
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         return
     finally:
-        ping_task.cancel()
-        try:
-            await ping_task
-        except asyncio.CancelledError:
-            pass
-        async with _connection_lock:
-            _connected_clients.pop(websocket, None)
+        await websocket_manager.disconnect(client_id)

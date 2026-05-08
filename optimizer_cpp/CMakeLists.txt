@@ -14,6 +14,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-add_executable(dispatch_optimizer src/main.cpp)
-target_link_libraries(dispatch_optimizer PRIVATE nlohmann_json::nlohmann_json)
-target_compile_features(dispatch_optimizer PRIVATE cxx_std_17)
+add_executable(raid_optimizer src/main.cpp)
+target_link_libraries(raid_optimizer PRIVATE nlohmann_json::nlohmann_json)
+target_compile_features(raid_optimizer PRIVATE cxx_std_17)

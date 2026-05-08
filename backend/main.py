@@ -24,6 +24,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from api.ambulances import router as ambulances_router
 from api.auth import get_current_admin, router as auth_router
 from api.dispatch import router as dispatch_router
+from api.driver import router as driver_router
 from api.hospitals import router as hospitals_router
 from api.incidents import router as incidents_router
 from api.overrides import router as overrides_router
@@ -31,6 +32,7 @@ from api.patients import router as patients_router
 from api.system import router as system_router
 from api.websocket import router as websocket_router
 from core.config import DATA_DIR, isoformat_utc, settings
+from core.logging import configure_logging
 from repositories.database import (
     IS_POSTGRES,
     close_connection,
@@ -48,7 +50,7 @@ from schemas.scenario import DispatchRequest as BaseDispatchRequest
 from services.anomaly_detector import get_recent_anomalies, get_total_detected
 from services.demand_predictor import CITY_BOUNDING_BOXES, build_density_grid, predict_demand, recommend_preposition
 from services.dispatch import select_dispatch
-from services.dispatch_service import full_dispatch_pipeline, save_dispatch_bg
+from services.dispatch_service import full_dispatch_pipeline, save_dispatch_bg, structured_dispatch_explanation
 from services.nlp_triage import triage_incident
 from services.offline_translator import get_translation_status
 from simulation.engine import SimulationEngine
@@ -56,7 +58,7 @@ from core.response import error, fallback, success, unwrap_envelope
 from alembic import command
 from alembic.config import Config
 
-logging.basicConfig(level=logging.INFO)
+configure_logging(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
 CPU_EXECUTOR = ThreadPoolExecutor(
     max_workers=4,
@@ -178,13 +180,20 @@ def _parse_cors_origins(value: str) -> list[str]:
 def _cors_origins() -> list[str]:
     """Return allowed CORS origins, honoring comma-separated env overrides."""
 
-    return _parse_cors_origins(os.getenv("CORS_ORIGINS") or settings.CORS_ORIGINS)
+    configured = os.getenv("CORS_ORIGINS") or settings.CORS_ORIGINS
+    origins = _parse_cors_origins(configured)
+    if settings.ENVIRONMENT.lower() == "production" and "*" in origins:
+        logger.warning("Wildcard CORS requested in production; falling back to localhost-only defaults.")
+        return ["http://localhost:5173", "http://localhost:3000"]
+    return origins
 
 
 def _cors_origin_regex() -> str | None:
     """Keep the development regex only when origins are not explicitly set."""
 
     if os.getenv("CORS_ORIGINS"):
+        return None
+    if "*" in _cors_origins():
         return None
     return settings.CORS_ORIGIN_REGEX or None
 
@@ -231,9 +240,10 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     """Return a stable envelope for uncaught errors."""
 
     logger.error("Unhandled error on %s: %s", request.url.path, exc, exc_info=True)
+    message = "Internal server error" if settings.ENVIRONMENT.lower() == "production" else str(exc)
     return JSONResponse(
         status_code=500,
-        content={"status": "error", "message": str(exc), "data": None},
+        content={"detail": message, "code": "INTERNAL_SERVER_ERROR"},
     )
 
 
@@ -421,12 +431,14 @@ async def favicon() -> Response:
 
 
 async def trigger_dispatch(
+    request: Request,
     payload: DispatchRequest,
     response: Response,
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any] | JSONResponse:
     """Select and execute a dispatch using the formal multi-objective scorer."""
 
+    _ = request
     incident = await IncidentRepository().get_by_id(payload.incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found.")
@@ -475,6 +487,16 @@ async def trigger_dispatch(
         dispatch_plan["baseline_eta_minutes"] = selection_preview["baseline_eta_minutes"]
         dispatch_plan["explanation_text"] = selection_preview["explanation_text"]
         dispatch_plan["dispatch_tier"] = selection_preview.get("dispatch_tier", dispatch_plan.get("dispatch_tier", "heuristic"))
+        selected_ambulance = next((item for item in ambulances if item.get("id") == dispatch_plan["ambulance_id"]), None)
+        selected_hospital = next((item for item in hospitals if item.get("id") == dispatch_plan["hospital_id"]), None)
+        dispatch_plan["explanation"] = structured_dispatch_explanation(
+            dispatch_plan,
+            selected_ambulance,
+            selected_hospital,
+            selection_preview,
+            ambulances=ambulances,
+            hospitals=hospitals,
+        )
         background_tasks.add_task(save_dispatch_bg, dispatch_plan)
 
     if dispatch_status == "fallback" or selection_preview["status"] == "fallback":
@@ -500,6 +522,19 @@ async def frontend_app(frontend_path: str) -> Response:
     return _frontend_response(frontend_path)
 
 
+async def _websocket_heartbeat_loop() -> None:
+    """Emit standard HEARTBEAT events to connected WebSocket clients."""
+
+    from api.websocket import websocket_manager
+
+    try:
+        while True:
+            await asyncio.sleep(30)
+            await websocket_manager.ping_all()
+    except asyncio.CancelledError:
+        raise
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize database state and background services for the app."""
@@ -508,6 +543,14 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     loop.set_default_executor(executor)
     logger.info("CPU thread pool initialized: 4 workers")
+    logger.info(
+        "Config summary: environment=%s database=%s cors_origins=%s llm_enabled=%s simulation_disabled=%s",
+        settings.ENVIRONMENT,
+        database_backend_label(),
+        _cors_origins(),
+        settings.USE_LLM,
+        DISABLE_SIMULATION,
+    )
     if settings.ENVIRONMENT == "production" and IS_POSTGRES:
         await asyncio.to_thread(run_migrations)
         logger.info("Database migrations applied")
@@ -553,6 +596,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_preload_hindi_translation_model())
     app.state.density_grid = await asyncio.to_thread(build_density_grid)
     app.state.simulation_engine = SimulationEngine()
+    app.state.websocket_heartbeat_task = asyncio.create_task(_websocket_heartbeat_loop())
     if DISABLE_SIMULATION:
         logger.info("Background simulation loop disabled by RAID_DISABLE_SIMULATION.")
     else:
@@ -560,6 +604,13 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        heartbeat_task = getattr(app.state, "websocket_heartbeat_task", None)
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
         simulation_engine = getattr(app.state, "simulation_engine", None)
         if simulation_engine is not None:
             await simulation_engine.stop()
@@ -600,9 +651,15 @@ def create_app() -> FastAPI:
     application.include_router(incidents_router, prefix="/api")
     application.include_router(patients_router, prefix="/api")
     application.include_router(dispatch_router, prefix="/api")
+    application.include_router(driver_router, prefix="/api")
     application.include_router(overrides_router, prefix="/api")
     application.include_router(system_router, prefix="/api")
-    application.add_api_route("/api/dispatch", trigger_dispatch, methods=["POST"], response_model=None)
+    application.add_api_route(
+        "/api/dispatch",
+        limiter.limit("10/minute")(trigger_dispatch),
+        methods=["POST"],
+        response_model=None,
+    )
     application.add_api_route("/api/benchmark", benchmark_results, methods=["GET"], response_model=None)
     application.add_api_route("/api/fairness", fairness_results, methods=["GET"], response_model=None)
     application.add_api_route(

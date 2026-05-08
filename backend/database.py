@@ -116,6 +116,7 @@ TABLE_JSON_FIELDS: dict[str, set[str]] = {
     "incidents": {"anomaly_flags"},
     "dispatch_plans": {"rejected_ambulances", "rejected_hospitals"},
     "dispatch_audit_log": {"metadata"},
+    "ai_decisions": {"explanation_json", "score_json"},
     "notifications": {"ambulance_equipment", "prep_checklist", "payload"},
 }
 
@@ -124,6 +125,7 @@ TABLE_BOOL_FIELDS: dict[str, set[str]] = {
     "incidents": {"requires_human_review", "has_anomaly"},
     "patients": {"sos_mode"},
     "dispatch_plans": {"overload_avoided"},
+    "alerts": {"resolved"},
     "users": {"is_active"},
 }
 
@@ -134,6 +136,10 @@ TABLE_ORDERING: dict[str, str] = {
     "patients": "ORDER BY created_at DESC",
     "dispatch_plans": "ORDER BY created_at DESC",
     "dispatch_audit_log": "ORDER BY created_at ASC",
+    "ai_decisions": "ORDER BY created_at DESC",
+    "eta_logs": "ORDER BY created_at DESC",
+    "benchmark_results": "ORDER BY created_at DESC",
+    "alerts": "ORDER BY created_at DESC",
     "override_requests": "ORDER BY requested_at DESC",
     "notifications": "ORDER BY created_at DESC",
     "users": "ORDER BY username ASC",
@@ -422,6 +428,40 @@ CREATE TABLE IF NOT EXISTS dispatch_audit_log (
     metadata TEXT
 );
 
+CREATE TABLE IF NOT EXISTS ai_decisions (
+    id TEXT PRIMARY KEY,
+    dispatch_id TEXT NOT NULL,
+    model_used TEXT NOT NULL,
+    explanation_json TEXT NOT NULL,
+    score_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS eta_logs (
+    id TEXT PRIMARY KEY,
+    dispatch_id TEXT NOT NULL,
+    predicted_eta REAL NOT NULL,
+    actual_eta REAL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS benchmark_results (
+    id TEXT PRIMARY KEY,
+    scenario_count INTEGER NOT NULL,
+    avg_eta REAL NOT NULL,
+    accuracy REAL NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    resolved INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS override_requests (
     id TEXT PRIMARY KEY,
     dispatch_id TEXT NOT NULL,
@@ -486,6 +526,15 @@ CREATE INDEX IF NOT EXISTS ix_dispatch_audit_log_dispatch_id ON dispatch_audit_l
 CREATE INDEX IF NOT EXISTS ix_dispatch_audit_log_actor_id ON dispatch_audit_log(actor_id);
 CREATE INDEX IF NOT EXISTS ix_dispatch_audit_log_event_type ON dispatch_audit_log(event_type);
 CREATE INDEX IF NOT EXISTS ix_dispatch_audit_log_created_at ON dispatch_audit_log(created_at);
+CREATE INDEX IF NOT EXISTS ix_ai_decisions_dispatch_id ON ai_decisions(dispatch_id);
+CREATE INDEX IF NOT EXISTS ix_ai_decisions_created_at ON ai_decisions(created_at);
+CREATE INDEX IF NOT EXISTS ix_eta_logs_dispatch_id ON eta_logs(dispatch_id);
+CREATE INDEX IF NOT EXISTS ix_eta_logs_created_at ON eta_logs(created_at);
+CREATE INDEX IF NOT EXISTS ix_benchmark_results_created_at ON benchmark_results(created_at);
+CREATE INDEX IF NOT EXISTS ix_alerts_type ON alerts(type);
+CREATE INDEX IF NOT EXISTS ix_alerts_severity ON alerts(severity);
+CREATE INDEX IF NOT EXISTS ix_alerts_resolved ON alerts(resolved);
+CREATE INDEX IF NOT EXISTS ix_alerts_created_at ON alerts(created_at);
 CREATE INDEX IF NOT EXISTS ix_override_requests_dispatch_id ON override_requests(dispatch_id);
 CREATE INDEX IF NOT EXISTS ix_override_requests_status ON override_requests(status);
 CREATE INDEX IF NOT EXISTS ix_users_username ON users(username);
@@ -547,6 +596,8 @@ async def _apply_sqlite_compat_migrations(connection: aiosqlite.Connection) -> N
 
 
 def _json_empty_value(table: str, key: str) -> Any:
+    if table == "ai_decisions":
+        return {}
     if table == "dispatch_audit_log" and key == "metadata":
         return {}
     if table == "notifications" and key == "payload":

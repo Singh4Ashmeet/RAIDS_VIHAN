@@ -41,18 +41,18 @@ class Settings(BaseSettings):
 
     BACKEND_PORT: int = 8000
     FRONTEND_PORT: int = 3000
-    CORS_ORIGINS: str = (
-        "http://localhost:3000,"
-        "http://127.0.0.1:3000,"
-        "http://localhost:5173,"
-        "http://127.0.0.1:5173,"
-        "https://raid-nexus.onrender.com"
-    )
+    CORS_ORIGINS: str = "*"
     CORS_ORIGIN_REGEX: str = r"^http://(localhost|127\.0\.0\.1):\d+$"
 
     ENABLE_NLP_TRIAGE: bool = True
     ENABLE_TRANSLATION: bool = True
     ENABLE_ANOMALY_DETECTION: bool = True
+    USE_LLM: bool = False
+    OLLAMA_URL: str = ""
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OPENROUTER_API_KEY: str = ""
+    MODEL_PATH: str = ""
+    LOG_LEVEL: str = "INFO"
 
     RAID_NEXUS_DB_PATH: str = str(DEFAULT_DB_PATH)
     RAID_NEXUS_TRAINING_DATA_PATH: str = ""

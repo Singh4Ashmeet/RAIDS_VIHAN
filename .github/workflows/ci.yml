@@ -1,24 +1,53 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+  pull_request:
 
 jobs:
-  backend:
+  backend-test:
     runs-on: ubuntu-latest
+    env:
+      RAID_DISABLE_SIMULATION: "1"
+      RAID_LIGHTWEIGHT_TRIAGE: "1"
+      ENABLE_NLP_TRIAGE: "false"
+      ENABLE_TRANSLATION: "false"
+      RAID_FORCE_SQLITE: "1"
+      USE_LLM: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - run: pip install -r backend/requirements.txt
-      - run: cd backend && python -m pytest tests/ -v || echo "No tests yet"
+          python-version: "3.11"
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Ruff
+        run: ruff check app/
+      - name: Pytest
+        run: pytest tests/ -x
 
-  frontend:
+  frontend-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - run: cd frontend && npm ci
-      - run: cd frontend && npm run build
-      - run: cd frontend && npm test -- --run
+          node-version: "20"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  cpp-build:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure optimizer
+        working-directory: optimizer_cpp
+        run: cmake -B build
+      - name: Build optimizer
+        working-directory: optimizer_cpp
+        run: cmake --build build

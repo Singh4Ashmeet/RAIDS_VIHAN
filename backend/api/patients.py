@@ -7,7 +7,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from core.config import isoformat_utc
+from core.config import isoformat_utc, settings
 from repositories.ambulance_repo import AmbulanceRepository
 from repositories.hospital_repo import HospitalRepository
 from repositories.patient_repo import PatientRepository
@@ -171,11 +171,12 @@ async def create_patient(
     except Exception as exc:
         if isinstance(exc, HTTPException):
             raise
+        message = "Patient intake failed" if settings.ENVIRONMENT.lower() == "production" else str(exc)
         if isinstance(exc, ValueError):
             response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-            return error(str(exc), code=500)
+            return error(message, code=500)
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return error(str(exc), code=500)
+        return error(message, code=500)
 
 
 @router.get("/{patient_id}", response_model=None)

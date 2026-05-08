@@ -63,7 +63,7 @@ describe('WebSocket reconnection', () => {
     MockWebSocket.instances[0].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(1)
 
-    await vi.advanceTimersByTimeAsync(1999)
+    await vi.advanceTimersByTimeAsync(999)
     expect(MockWebSocket.instances).toHaveLength(1)
 
     await vi.advanceTimersByTimeAsync(1)
@@ -79,31 +79,44 @@ describe('WebSocket reconnection', () => {
     expect(MockWebSocket.instances).toHaveLength(3)
   })
 
-  it('uses 2s, 3s, then 4.5s delays for repeated failed connections', async () => {
+  it('uses 1s, 2s, then 4s delays for repeated failed connections', async () => {
     MockWebSocket.autoOpen = false
     useDispatchStore.getState().connectWS()
     expect(MockWebSocket.instances).toHaveLength(1)
 
     MockWebSocket.instances[0].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(1)
-    await vi.advanceTimersByTimeAsync(1999)
+    await vi.advanceTimersByTimeAsync(999)
     expect(MockWebSocket.instances).toHaveLength(1)
     await vi.advanceTimersByTimeAsync(1)
     expect(MockWebSocket.instances).toHaveLength(2)
 
     MockWebSocket.instances[1].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(2)
-    await vi.advanceTimersByTimeAsync(2999)
+    await vi.advanceTimersByTimeAsync(1999)
     expect(MockWebSocket.instances).toHaveLength(2)
     await vi.advanceTimersByTimeAsync(1)
     expect(MockWebSocket.instances).toHaveLength(3)
 
     MockWebSocket.instances[2].simulateDisconnect()
     expect(useDispatchStore.getState()._wsReconnectAttempts).toBe(3)
-    await vi.advanceTimersByTimeAsync(4499)
+    await vi.advanceTimersByTimeAsync(3999)
     expect(MockWebSocket.instances).toHaveLength(3)
     await vi.advanceTimersByTimeAsync(1)
     expect(MockWebSocket.instances).toHaveLength(4)
+  })
+
+  it('acknowledges server heartbeat events', async () => {
+    useDispatchStore.getState().connectWS()
+    await vi.advanceTimersByTimeAsync(0)
+
+    MockWebSocket.instances[0].simulateMessage({
+      event: 'HEARTBEAT',
+      type: 'ping',
+      timestamp: '2026-05-08T00:00:00+00:00',
+    })
+
+    expect(MockWebSocket.instances[0]._lastSent).toContain('HEARTBEAT_ACK')
   })
 
   it('blocks cross-city route_change routes and keeps the existing local route', async () => {
