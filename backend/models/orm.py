@@ -11,8 +11,6 @@ class Base(DeclarativeBase):
 class Ambulance(Base):
     __tablename__ = "ambulances"
     __table_args__ = (
-        Index("ix_ambulances_city", "city"),
-        Index("ix_ambulances_status", "status"),
         Index("ix_ambulances_city_status", "city", "status"),
     )
 
@@ -33,7 +31,6 @@ class Ambulance(Base):
 class Hospital(Base):
     __tablename__ = "hospitals"
     __table_args__ = (
-        Index("ix_hospitals_city", "city"),
         Index("ix_hospitals_diversion_status", "diversion_status"),
         Index("ix_hospitals_city_diversion", "city", "diversion_status"),
     )
@@ -58,10 +55,6 @@ class Hospital(Base):
 class Incident(Base):
     __tablename__ = "incidents"
     __table_args__ = (
-        Index("ix_incidents_city", "city"),
-        Index("ix_incidents_status", "status"),
-        Index("ix_incidents_severity", "severity"),
-        Index("ix_incidents_created_at", "created_at"),
         Index("ix_incidents_city_status", "city", "status"),
     )
 
@@ -117,10 +110,6 @@ class Patient(Base):
 class DispatchPlan(Base):
     __tablename__ = "dispatch_plans"
     __table_args__ = (
-        Index("ix_dispatch_plans_incident_id", "incident_id"),
-        Index("ix_dispatch_plans_ambulance_id", "ambulance_id"),
-        Index("ix_dispatch_plans_hospital_id", "hospital_id"),
-        Index("ix_dispatch_plans_status", "status"),
         Index("ix_dispatch_plans_created_at", "created_at"),
     )
 
@@ -149,12 +138,6 @@ class DispatchPlan(Base):
 
 class DispatchAuditLog(Base):
     __tablename__ = "dispatch_audit_log"
-    __table_args__ = (
-        Index("ix_dispatch_audit_log_dispatch_id", "dispatch_id"),
-        Index("ix_dispatch_audit_log_actor_id", "actor_id"),
-        Index("ix_dispatch_audit_log_event_type", "event_type"),
-        Index("ix_dispatch_audit_log_created_at", "created_at"),
-    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     event_type: Mapped[str] = mapped_column(String, index=True)
@@ -184,10 +167,6 @@ class DispatchAuditLog(Base):
 
 class AIDecision(Base):
     __tablename__ = "ai_decisions"
-    __table_args__ = (
-        Index("ix_ai_decisions_dispatch_id", "dispatch_id"),
-        Index("ix_ai_decisions_created_at", "created_at"),
-    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     dispatch_id: Mapped[str] = mapped_column(String, index=True)
@@ -199,10 +178,6 @@ class AIDecision(Base):
 
 class ETALog(Base):
     __tablename__ = "eta_logs"
-    __table_args__ = (
-        Index("ix_eta_logs_dispatch_id", "dispatch_id"),
-        Index("ix_eta_logs_created_at", "created_at"),
-    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     dispatch_id: Mapped[str] = mapped_column(String, index=True)
@@ -213,9 +188,6 @@ class ETALog(Base):
 
 class BenchmarkResult(Base):
     __tablename__ = "benchmark_results"
-    __table_args__ = (
-        Index("ix_benchmark_results_created_at", "created_at"),
-    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     scenario_count: Mapped[int] = mapped_column(Integer)
@@ -227,10 +199,7 @@ class BenchmarkResult(Base):
 class Alert(Base):
     __tablename__ = "alerts"
     __table_args__ = (
-        Index("ix_alerts_type", "type"),
-        Index("ix_alerts_severity", "severity"),
         Index("ix_alerts_resolved", "resolved"),
-        Index("ix_alerts_created_at", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -244,9 +213,7 @@ class Alert(Base):
 class OverrideRequest(Base):
     __tablename__ = "override_requests"
     __table_args__ = (
-        Index("ix_override_requests_dispatch_id", "dispatch_id"),
         Index("ix_override_requests_requested_by", "requested_by"),
-        Index("ix_override_requests_status", "status"),
         Index("ix_override_requests_requested_at", "requested_at"),
         Index("ix_override_requests_reason_category", "reason_category"),
     )
@@ -270,10 +237,6 @@ class OverrideRequest(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
-    __table_args__ = (
-        Index("ix_notifications_hospital_id", "hospital_id"),
-        Index("ix_notifications_created_at", "created_at"),
-    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     hospital_id: Mapped[str] = mapped_column(String, index=True)
@@ -295,7 +258,6 @@ class Notification(Base):
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
-        Index("ix_users_username", "username"),
         Index("ix_users_role", "role"),
     )
 
