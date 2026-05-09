@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import IS_POSTGRES, TABLE_BOOL_FIELDS, TABLE_JSON_FIELDS
+from database import IS_POSTGRES, TABLE_BOOL_FIELDS, TABLE_INSERT_DEFAULTS, TABLE_JSON_FIELDS
 
 
 def is_pg_session(db: Any) -> bool:
@@ -16,7 +16,8 @@ def is_pg_session(db: Any) -> bool:
 
 def serialize_for_model(table: str, payload: dict[str, Any]) -> dict[str, Any]:
     serialized: dict[str, Any] = {}
-    for key, value in payload.items():
+    payload_with_defaults = {**TABLE_INSERT_DEFAULTS.get(table, {}), **payload}
+    for key, value in payload_with_defaults.items():
         if key in TABLE_JSON_FIELDS.get(table, set()):
             serialized[key] = json.dumps(value if value is not None else [], ensure_ascii=True)
         elif key in TABLE_BOOL_FIELDS.get(table, set()):

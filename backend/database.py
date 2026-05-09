@@ -129,6 +129,19 @@ TABLE_BOOL_FIELDS: dict[str, set[str]] = {
     "users": {"is_active"},
 }
 
+TABLE_INSERT_DEFAULTS: dict[str, dict[str, Any]] = {
+    "hospitals": {"diversion_status": False, "incoming_patients": []},
+    "incidents": {
+        "requires_human_review": False,
+        "has_anomaly": False,
+        "anomaly_flags": [],
+    },
+    "patients": {"sos_mode": False},
+    "dispatch_plans": {"dispatch_tier": "heuristic", "overload_avoided": False},
+    "alerts": {"resolved": False},
+    "users": {"is_active": True},
+}
+
 TABLE_ORDERING: dict[str, str] = {
     "ambulances": "ORDER BY id ASC",
     "hospitals": "ORDER BY id ASC",
@@ -713,7 +726,11 @@ async def count_rows(table: str) -> int:
 async def insert_record(table: str, payload: dict[str, Any]) -> None:
     """Insert a serialized record into a table."""
 
-    serialized = {key: _serialize_value(table, key, value) for key, value in payload.items()}
+    payload_with_defaults = {**TABLE_INSERT_DEFAULTS.get(table, {}), **payload}
+    serialized = {
+        key: _serialize_value(table, key, value)
+        for key, value in payload_with_defaults.items()
+    }
     columns = ", ".join(serialized.keys())
     placeholders = ", ".join(f":{key}" for key in serialized.keys())
     async with get_connection() as connection:
