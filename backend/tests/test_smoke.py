@@ -99,6 +99,7 @@ class RaidNexusSmokeTests(unittest.TestCase):
             root = client.get("/", follow_redirects=False)
             spa_route = client.get("/dashboard", follow_redirects=False)
             docs = client.get("/docs", follow_redirects=False)
+            openapi = client.get("/openapi.json", follow_redirects=False)
             favicon = client.get("/favicon.ico")
             health = client.get("/health")
             self.assertEqual(health.status_code, 200)
@@ -114,6 +115,8 @@ class RaidNexusSmokeTests(unittest.TestCase):
                 self.assertIn("Frontend build not found", root.text)
                 self.assertEqual(spa_route.status_code, 503)
             self.assertEqual(docs.status_code, 200)
+            self.assertEqual(openapi.status_code, 200)
+            self.assertIn("/health", openapi.json()["paths"])
             self.assertEqual(favicon.status_code, 200)
             self.assertEqual(favicon.headers["content-type"], "image/svg+xml")
 
@@ -127,7 +130,7 @@ class RaidNexusSmokeTests(unittest.TestCase):
             self.assertEqual(len(self._unwrap_payload(ambulances.json())), 15)
             self.assertEqual(len(self._unwrap_payload(hospitals.json())), 10)
             self.assertEqual(len(self._unwrap_payload(incidents.json())), 50)
-            self._close_responses(root, spa_route, docs, favicon, health, ambulances, hospitals, incidents)
+            self._close_responses(root, spa_route, docs, openapi, favicon, health, ambulances, hospitals, incidents)
 
     def test_dispatch_pipeline(self) -> None:
         with TestClient(create_app()) as client:

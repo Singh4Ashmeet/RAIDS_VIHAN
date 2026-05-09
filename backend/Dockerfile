@@ -6,8 +6,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ARG REQUIREMENTS_FILE=requirements-prod.txt
+COPY requirements.txt requirements-prod.txt ./
+RUN pip install --no-cache-dir -r "$REQUIREMENTS_FILE"
 
 COPY . .
 

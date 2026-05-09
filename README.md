@@ -88,9 +88,11 @@ Missing ML models use deterministic distance/capacity heuristics. Failed heurist
 
 ## Deployment Options
 
-Docker VPS: run `docker compose up --build -d` with production `.env` values and a managed Postgres-compatible volume or service.
+Render: the repo includes a production Blueprint in `render.yaml`. Push the repo, then open `https://dashboard.render.com/blueprint/new?repo=https://github.com/Singh4Ashmeet/RAIDS_VIHAN`, set the prompted admin/user passwords, and apply the Blueprint. It deploys one Docker web service and one managed Postgres database.
 
-Render: deploy the root Dockerfile or `render.yaml`, set `DATABASE_URL`, `SECRET_KEY`, and explicit `CORS_ORIGINS`.
+Docker VPS: run `docker compose up --build -d` with production `.env` values and a managed Postgres-compatible volume or service. For a public domain, set `VITE_API_BASE_URL`, `VITE_WS_URL`, and `CORS_ORIGINS` before building.
+
+Lightweight production images use `requirements-prod.txt`, which excludes optional local NLP/translation packages. Use `--build-arg REQUIREMENTS_FILE=requirements.txt` only if you want the heavy offline AI stack inside the container.
 
 Vercel: deploy the frontend only, set `VITE_API_BASE_URL` and `VITE_WS_URL` to the backend host.
 

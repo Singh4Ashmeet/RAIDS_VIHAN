@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    chunkSizeWarningLimit: 750,
+    chunkSizeWarningLimit: 1100,
     rolldownOptions: {
       output: {
         codeSplitting: true,
@@ -23,6 +23,26 @@ export default defineConfig({
 
           if (id.includes('framer-motion')) {
             return 'vendor-motion'
+          }
+
+          if (
+            id.includes('maplibre-gl') ||
+            id.includes('@maplibre') ||
+            id.includes('@mapbox') ||
+            id.includes('geojson-vt') ||
+            id.includes('supercluster') ||
+            id.includes('quickselect') ||
+            id.includes('kdbush')
+          ) {
+            return 'vendor-map'
+          }
+
+          if (id.includes('react-router-dom')) {
+            return 'vendor-router'
+          }
+
+          if (id.includes('axios') || id.includes('zustand')) {
+            return 'vendor-state'
           }
 
           if (id.includes('lucide-react')) {

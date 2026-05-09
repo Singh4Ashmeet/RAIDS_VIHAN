@@ -8,6 +8,7 @@ try:
 except ModuleNotFoundError:
     from backend.core.security import limiter
 
+from repositories.ambulance_repo import AmbulanceRepository
 from repositories.hospital_repo import HospitalRepository
 from schemas.scenario import ScenarioRequest
 from services.analytics_service import broadcast_score_update, build_analytics_snapshot
@@ -65,9 +66,41 @@ def _cardiac_explanation(dispatch_plan: dict[str, object], hospitals: list[dict[
     }
 
 
+async def _prepare_cardiac_fixture() -> None:
+    """Reset one deterministic Delhi unit and hospital so demos survive prior runs."""
+
+    ambulance_repo = AmbulanceRepository()
+    hospital_repo = HospitalRepository()
+
+    if await ambulance_repo.get_by_id("AMB-001"):
+        await ambulance_repo.update(
+            "AMB-001",
+            {
+                "current_lat": 28.6140,
+                "current_lng": 77.2090,
+                "status": "available",
+                "assigned_incident_id": None,
+                "assigned_hospital_id": None,
+                "crew_readiness": 0.95,
+            },
+        )
+
+    if await hospital_repo.get_by_id("HOSP-001"):
+        await hospital_repo.update(
+            "HOSP-001",
+            {
+                "occupancy_pct": 68.0,
+                "er_wait_minutes": 24,
+                "icu_beds_available": 12,
+                "acceptance_score": 0.84,
+                "diversion_status": False,
+            },
+        )
+
+
 @router.post("/scenarios/run", response_model=None)
 @router.post("/simulate/scenario", response_model=None)
-@limiter.limit("2/minute")
+@limiter.limit("12/minute")
 async def trigger_scenario(
     request: Request,
     response: Response,
@@ -80,6 +113,7 @@ async def trigger_scenario(
     body: dict[str, object] = {"scenario": payload.type}
 
     if payload.type == "cardiac":
+        await _prepare_cardiac_fixture()
         incident = build_incident_payload(
             city="Delhi",
             incident_type="cardiac",

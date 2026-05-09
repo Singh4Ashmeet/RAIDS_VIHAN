@@ -6,21 +6,24 @@ import asyncio
 import json
 import logging
 import math
+import os
 import time
-from typing import Final
 
 import httpx
 
+from core.config import settings
 from services.traffic import get_traffic_multiplier
 
 logger = logging.getLogger("raid.routing")
 
-_OSRM_BASE_URL: Final[str] = "http://router.project-osrm.org/route/v1/driving"
-_OSRM_TIMEOUT_SECONDS: Final[float] = 4.0
-_CACHE_TTL_SECONDS: Final[float] = 300.0
+_DEFAULT_OSRM_URL = "http://router.project-osrm.org"
+_OSRM_TIMEOUT_SECONDS = 4.0
+_ROUTE_GEOMETRY_TIMEOUT_SECONDS = 2.0
+_CACHE_TTL_SECONDS = 300.0
 
 _CacheKey = tuple[float, float, float, float]
 _travel_time_cache: dict[_CacheKey, tuple[float, float]] = {}
+_polyline_cache: dict[_CacheKey, tuple[list[list[float]], float]] = {}
 _route_locks: dict[_CacheKey, asyncio.Lock] = {}
 _route_locks_guard = asyncio.Lock()
 
@@ -45,7 +48,26 @@ def _route_url(
     dest_lat: float,
     dest_lng: float,
 ) -> str:
-    return f"{_OSRM_BASE_URL}/{origin_lng},{origin_lat};{dest_lng},{dest_lat}"
+    return f"{_osrm_route_base_url()}/{origin_lng},{origin_lat};{dest_lng},{dest_lat}"
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _external_routing_disabled() -> bool:
+    return settings.RAID_DISABLE_EXTERNAL_ROUTING or _env_flag("RAID_DISABLE_EXTERNAL_ROUTING")
+
+
+def _route_geometry_disabled() -> bool:
+    return settings.RAID_DISABLE_ROUTE_GEOMETRY or _env_flag("RAID_DISABLE_ROUTE_GEOMETRY")
+
+
+def _osrm_route_base_url() -> str:
+    base_url = (os.getenv("OSRM_URL") or settings.OSRM_URL or _DEFAULT_OSRM_URL).rstrip("/")
+    if base_url.endswith("/route/v1/driving"):
+        return base_url
+    return f"{base_url}/route/v1/driving"
 
 
 def _midpoint(origin_value: float, dest_value: float) -> float:
@@ -65,8 +87,25 @@ def _get_cached_result(key: _CacheKey, now: float) -> float | None:
     return None
 
 
+def _get_cached_polyline(key: _CacheKey, now: float) -> list[list[float]] | None:
+    cached = _polyline_cache.get(key)
+    if cached is None:
+        return None
+
+    value, cached_at = cached
+    if (now - cached_at) < _CACHE_TTL_SECONDS:
+        return value
+
+    _polyline_cache.pop(key, None)
+    return None
+
+
 def _store_cached_result(key: _CacheKey, value: float) -> None:
     _travel_time_cache[key] = (value, time.monotonic())
+
+
+def _store_cached_polyline(key: _CacheKey, value: list[list[float]]) -> None:
+    _polyline_cache[key] = (value, time.monotonic())
 
 
 async def _lock_for_key(key: _CacheKey) -> asyncio.Lock:
@@ -85,8 +124,9 @@ async def _fetch_route_json(
     dest_lng: float,
     *,
     params: dict[str, str],
+    timeout_seconds: float = _OSRM_TIMEOUT_SECONDS,
 ) -> dict:
-    async with httpx.AsyncClient(timeout=httpx.Timeout(_OSRM_TIMEOUT_SECONDS)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds)) as client:
         response = await client.get(
             _route_url(origin_lat, origin_lng, dest_lat, dest_lng),
             params=params,
@@ -141,36 +181,44 @@ async def get_travel_time(
         async with key_lock:
             base_travel_time_minutes = _get_cached_result(key, time.monotonic())
             if base_travel_time_minutes is None:
-                try:
-                    payload = await _fetch_route_json(
-                        origin_lat,
-                        origin_lng,
-                        dest_lat,
-                        dest_lng,
-                        params={"overview": "false", "annotations": "false"},
-                    )
-                    base_travel_time_minutes = _parse_duration_minutes(payload)
-                except (
-                    httpx.TimeoutException,
-                    httpx.ConnectError,
-                    httpx.HTTPError,
-                    json.JSONDecodeError,
-                    KeyError,
-                    IndexError,
-                    TypeError,
-                    ValueError,
-                ) as exc:
-                    logger.warning(
-                        "OSRM travel-time lookup failed for %s, using fallback: %s",
-                        key,
-                        exc,
-                    )
+                if _external_routing_disabled():
                     base_travel_time_minutes = _haversine_fallback(
                         origin_lat,
                         origin_lng,
                         dest_lat,
                         dest_lng,
                     )
+                else:
+                    try:
+                        payload = await _fetch_route_json(
+                            origin_lat,
+                            origin_lng,
+                            dest_lat,
+                            dest_lng,
+                            params={"overview": "false", "annotations": "false"},
+                        )
+                        base_travel_time_minutes = _parse_duration_minutes(payload)
+                    except (
+                        httpx.TimeoutException,
+                        httpx.ConnectError,
+                        httpx.HTTPError,
+                        json.JSONDecodeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ) as exc:
+                        logger.warning(
+                            "OSRM travel-time lookup failed for %s, using fallback: %s",
+                            key,
+                            exc,
+                        )
+                        base_travel_time_minutes = _haversine_fallback(
+                            origin_lat,
+                            origin_lng,
+                            dest_lat,
+                            dest_lng,
+                        )
 
                 _store_cached_result(key, base_travel_time_minutes)
 
@@ -188,6 +236,14 @@ async def get_route_polyline(
 ) -> list[list[float]]:
     """Return a route polyline as [[lat, lng], ...] for map display."""
 
+    if _route_geometry_disabled():
+        return []
+
+    key = _cache_key(origin_lat, origin_lng, dest_lat, dest_lng)
+    cached = _get_cached_polyline(key, time.monotonic())
+    if cached is not None:
+        return cached
+
     try:
         payload = await _fetch_route_json(
             origin_lat,
@@ -195,9 +251,12 @@ async def get_route_polyline(
             dest_lat,
             dest_lng,
             params={"overview": "full", "geometries": "geojson", "annotations": "false"},
+            timeout_seconds=_ROUTE_GEOMETRY_TIMEOUT_SECONDS,
         )
         coordinates = payload["routes"][0]["geometry"]["coordinates"]
-        return [[float(lat), float(lng)] for lng, lat in coordinates]
+        route = [[float(lat), float(lng)] for lng, lat in coordinates]
+        _store_cached_polyline(key, route)
+        return route
     except (
         httpx.TimeoutException,
         httpx.ConnectError,

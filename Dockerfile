@@ -12,8 +12,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ARG REQUIREMENTS_FILE=requirements-prod.txt
+COPY requirements.txt requirements-prod.txt ./
+RUN pip install --no-cache-dir -r "$REQUIREMENTS_FILE"
 
 COPY . .
 COPY --from=frontend /app/frontend/dist ./frontend/dist

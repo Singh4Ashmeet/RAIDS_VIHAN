@@ -291,14 +291,26 @@ function addMapSourcesAndLayers(map, mode) {
   })
 
   map.addLayer({
+    id: 'main-route-casing',
+    type: 'line',
+    source: 'main-route',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': '#020617',
+      'line-width': 9,
+      'line-opacity': 0.92,
+    },
+  })
+
+  map.addLayer({
     id: 'main-route-line',
     type: 'line',
     source: 'main-route',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
-      'line-color': '#10b981',
-      'line-width': 5,
-      'line-opacity': 0.9,
+      'line-color': '#3b82f6',
+      'line-width': 6,
+      'line-opacity': 0.96,
     },
   })
 

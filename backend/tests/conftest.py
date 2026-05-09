@@ -16,6 +16,7 @@ def fresh_test_database(tmp_path, monkeypatch):
     monkeypatch.setenv("RAID_NEXUS_DB_PATH", str(db_path))
     monkeypatch.setenv("RAID_NEXUS_TRAINING_DATA_PATH", str(training_path))
     monkeypatch.setenv("RAID_FORCE_SQLITE", "1")
+    monkeypatch.setenv("RAID_DISABLE_EXTERNAL_ROUTING", "1")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     yield db_path
     if db_path.exists():

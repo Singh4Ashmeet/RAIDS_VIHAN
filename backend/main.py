@@ -89,6 +89,26 @@ DISABLE_SIMULATION = settings.RAID_DISABLE_SIMULATION or os.getenv("RAID_DISABLE
     "yes",
     "on",
 }
+DISABLE_EXTERNAL_ROUTING = (
+    settings.RAID_DISABLE_EXTERNAL_ROUTING
+    or os.getenv("RAID_DISABLE_EXTERNAL_ROUTING", "").strip().lower()
+    in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+)
+DISABLE_ROUTE_GEOMETRY = (
+    settings.RAID_DISABLE_ROUTE_GEOMETRY
+    or os.getenv("RAID_DISABLE_ROUTE_GEOMETRY", "").strip().lower()
+    in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+)
 
 
 def _ensure_cpu_executor() -> ThreadPoolExecutor:
@@ -263,10 +283,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
     _ = request
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         content=error(
             _format_api_message(exc.errors(), "Validation error"),
-            code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code=422,
         ),
     )
 
@@ -544,12 +564,16 @@ async def lifespan(app: FastAPI):
     loop.set_default_executor(executor)
     logger.info("CPU thread pool initialized: 4 workers")
     logger.info(
-        "Config summary: environment=%s database=%s cors_origins=%s llm_enabled=%s simulation_disabled=%s",
+        "Config summary: environment=%s database=%s cors_origins=%s "
+        "llm_enabled=%s simulation_disabled=%s external_routing_disabled=%s "
+        "route_geometry_disabled=%s",
         settings.ENVIRONMENT,
         database_backend_label(),
         _cors_origins(),
         settings.USE_LLM,
         DISABLE_SIMULATION,
+        DISABLE_EXTERNAL_ROUTING,
+        DISABLE_ROUTE_GEOMETRY,
     )
     if settings.ENVIRONMENT == "production" and IS_POSTGRES:
         await asyncio.to_thread(run_migrations)

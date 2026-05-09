@@ -319,10 +319,12 @@ async def full_dispatch_pipeline(
 
         if persist_dispatch:
             await dispatch_repo.create(dispatch_record_payload(dispatch_plan))
-        try:
-            audit_id = await log_ai_dispatch(dispatch_plan, incident, actor_id="system")
-        except Exception as exc:
-            logger.warning("Dispatch audit logging failed for %s: %s", dispatch_plan["id"], exc)
+            try:
+                audit_id = await log_ai_dispatch(dispatch_plan, incident, actor_id="system")
+            except Exception as exc:
+                logger.warning("Dispatch audit logging failed for %s: %s", dispatch_plan["id"], exc)
+                audit_id = None
+        else:
             audit_id = None
         dispatch_plan["audit_id"] = audit_id
         dispatch_plan["explanation"] = structured_dispatch_explanation(

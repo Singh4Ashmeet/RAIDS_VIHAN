@@ -4,3 +4,9 @@
 "backend/ml/train.py" = ["E401", "E702"]
 "app/ml/synthetic_generator.py" = ["E402"]
 "app/ml/train.py" = ["E401", "E702"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore:'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16:DeprecationWarning:slowapi.extension",
+  "ignore:datetime.datetime.utcnow\\(\\) is deprecated and scheduled for removal in a future version:DeprecationWarning:jose.jwt",
+]

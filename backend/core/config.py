@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     RAID_NEXUS_TRAINING_DATA_PATH: str = ""
     RAID_FORCE_SQLITE: bool = False
     RAID_DISABLE_SIMULATION: bool = False
+    RAID_DISABLE_EXTERNAL_ROUTING: bool = False
+    RAID_DISABLE_ROUTE_GEOMETRY: bool = False
+    RAID_ENABLE_ALTERNATE_ROUTE_GEOMETRY: bool = False
     RAID_LIGHTWEIGHT_TRIAGE: bool = False
 
     model_config = SettingsConfigDict(

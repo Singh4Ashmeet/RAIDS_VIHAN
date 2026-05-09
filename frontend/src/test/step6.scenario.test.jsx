@@ -74,6 +74,35 @@ describe('ScenarioLab page', () => {
     expect(await screen.findByText('Incident created')).toBeInTheDocument()
   })
 
+  it('runs overload, breakdown, and traffic scenarios and renders their traces', async () => {
+    const user = userEvent.setup()
+    render(<ScenarioLab />)
+
+    const cases = [
+      {
+        region: /hospital overload scenario/i,
+        button: /run hospital overload scenario/i,
+        trace: 'Hospital targeted',
+      },
+      {
+        region: /ambulance breakdown scenario/i,
+        button: /run ambulance breakdown scenario/i,
+        trace: 'Ambulance taken offline',
+      },
+      {
+        region: /traffic spike scenario/i,
+        button: /run traffic spike scenario/i,
+        trace: 'City affected',
+      },
+    ]
+
+    for (const scenario of cases) {
+      const card = await screen.findByRole('region', { name: scenario.region })
+      await user.click(within(card).getByRole('button', { name: scenario.button }))
+      expect(await screen.findByText(scenario.trace)).toBeInTheDocument()
+    }
+  })
+
   it('renders the fallback trace state when cardiac returns HTTP 207', async () => {
     const user = userEvent.setup()
 

@@ -13,7 +13,9 @@ from core.config import isoformat_utc
 from core.response import APIResponse, ApiResponse, error, fallback, success, unwrap_envelope
 from core.security import limiter
 from main import create_app
+from repositories.ambulance_repo import AmbulanceRepository
 from repositories.dispatch_repo import DispatchRepository
+from repositories.hospital_repo import HospitalRepository
 
 
 def assert_envelope(payload: dict[str, Any], status: str) -> dict[str, Any]:
@@ -196,6 +198,12 @@ def test_cardiac_scenario_includes_structured_explanation(monkeypatch, fresh_tes
         return None
 
     class FakeHospitalRepository:
+        async def get_by_id(self, _id):
+            return {"id": _id}
+
+        async def update(self, _id, _updates):
+            return None
+
         async def get_all(self, _city=None):
             return [
                 {"id": "HOSP-001", "name": "Selected Hospital", "specialties": ["cardiology"]},
@@ -223,6 +231,104 @@ def test_cardiac_scenario_includes_structured_explanation(monkeypatch, fresh_tes
     assert data["explanation"]["selected_reason"] == "Nearest ALS unit with highest composite score"
     assert data["explanation"]["score_breakdown"]["final_score"] == 0.912
     assert data["explanation"]["rejected_hospitals"][0]["id"] == "HOSP-002"
+
+
+def test_scenario_lab_can_run_all_cards_without_throttling(monkeypatch, fresh_test_database) -> None:
+    dispatch_plan = {
+        "id": "DISP-SCENARIO-LAB",
+        "incident_id": "INC-SCENARIO-LAB",
+        "patient_id": None,
+        "ambulance_id": "AMB-001",
+        "hospital_id": "HOSP-001",
+        "eta_minutes": 8.5,
+        "final_score": 0.91,
+        "score_breakdown": {
+            "total_score": 0.91,
+            "components": {
+                "eta_score": 0.8,
+                "capacity_score": 0.7,
+                "specialty_score": 1.0,
+            },
+        },
+        "status": "active",
+        "city": "Delhi",
+        "dispatch_tier": "heuristic",
+    }
+
+    async def fake_create_incident(_incident):
+        return None
+
+    async def fake_full_dispatch_pipeline(_incident_id, *_args, **_kwargs):
+        return success(dispatch_plan)
+
+    async def fake_broadcast_event(_event):
+        return None
+
+    class FakeHospitalRepository:
+        async def get_by_id(self, _id):
+            return {"id": _id}
+
+        async def update(self, _id, _updates):
+            return None
+
+        async def get_all(self, _city=None):
+            return [
+                {"id": "HOSP-001", "name": "Selected Hospital", "specialties": ["cardiology"]},
+                {"id": "HOSP-002", "name": "Rejected Hospital", "specialties": ["trauma"]},
+            ]
+
+    monkeypatch.setattr(system_api, "create_incident", fake_create_incident)
+    monkeypatch.setattr(system_api, "full_dispatch_pipeline", fake_full_dispatch_pipeline)
+    monkeypatch.setattr(system_api, "HospitalRepository", FakeHospitalRepository)
+    monkeypatch.setattr(websocket_api, "broadcast_event", fake_broadcast_event)
+
+    with TestClient(create_app()) as client:
+        limiter._storage.reset()
+        responses = [
+            client.post("/api/simulate/scenario", json={"type": scenario_type})
+            for scenario_type in ("cardiac", "overload", "breakdown", "traffic")
+        ]
+
+    assert [response.status_code for response in responses] == [200, 200, 200, 200]
+    payloads = [assert_envelope(response.json(), "success") for response in responses]
+    assert [payload["scenario"] for payload in payloads] == ["cardiac", "overload", "breakdown", "traffic"]
+    assert payloads[0]["dispatch_plan"]["id"] == "DISP-SCENARIO-LAB"
+    assert payloads[1]["overload"]["hospital_id"] == "HOSP-005"
+    assert payloads[2]["breakdown"]["ambulance_id"] == "AMB-007"
+    assert payloads[3]["traffic"]["multiplier"] == 2.5
+
+
+def test_cardiac_scenario_resets_stale_demo_resources(fresh_test_database) -> None:
+    async def stale_demo_resources() -> None:
+        ambulance_repo = AmbulanceRepository()
+        hospital_repo = HospitalRepository()
+        for ambulance in await ambulance_repo.get_all("Delhi"):
+            await ambulance_repo.update(
+                str(ambulance["id"]),
+                {
+                    "status": "unavailable",
+                    "assigned_incident_id": "INC-STALE",
+                    "assigned_hospital_id": "HOSP-STALE",
+                },
+            )
+        await hospital_repo.update(
+            "HOSP-001",
+            {
+                "occupancy_pct": 99.0,
+                "acceptance_score": 0.01,
+                "diversion_status": True,
+            },
+        )
+
+    with TestClient(create_app()) as client:
+        asyncio.run(stale_demo_resources())
+        limiter._storage.reset()
+        response = client.post("/api/simulate/scenario", json={"type": "cardiac"})
+
+    assert response.status_code == 200
+    data = assert_envelope(response.json(), "success")
+    assert data["dispatch_plan"]["ambulance_id"] == "AMB-001"
+    assert data["dispatch_plan"]["hospital_id"] == "HOSP-001"
 
 
 def test_auth_failure_is_enveloped(fresh_test_database) -> None:

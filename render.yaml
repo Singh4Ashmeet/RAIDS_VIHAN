@@ -1,31 +1,61 @@
 services:
   - type: web
-    name: raid-nexus-backend
+    name: raid-nexus
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    region: singapore
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: raid-nexus-postgres
+          property: connectionString
       - key: SECRET_KEY
         generateValue: true
       - key: ENVIRONMENT
         value: production
       - key: CORS_ORIGINS
-        value: '["https://raid-nexus.onrender.com"]'
+        value: https://raid-nexus.onrender.com
       - key: ENABLE_NLP_TRIAGE
         value: "false"
       - key: ENABLE_TRANSLATION
         value: "false"
       - key: ENABLE_ANOMALY_DETECTION
         value: "true"
+      - key: RAID_LIGHTWEIGHT_TRIAGE
+        value: "true"
+      - key: RAID_DISABLE_SIMULATION
+        value: "true"
+      - key: RAID_DISABLE_EXTERNAL_ROUTING
+        value: "true"
+      - key: RAID_DISABLE_ROUTE_GEOMETRY
+        value: "false"
+      - key: RAID_ENABLE_ALTERNATE_ROUTE_GEOMETRY
+        value: "false"
+      - key: USE_LLM
+        value: "false"
+      - key: MODEL_PATH
+        value: ""
+      - key: OLLAMA_URL
+        value: ""
+      - key: OLLAMA_BASE_URL
+        value: ""
+      - key: OPENROUTER_API_KEY
+        value: ""
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
-        value: admin123
+        sync: false
       - key: USER_USERNAME
         value: user
       - key: USER_PASSWORD
-        value: user123
+        sync: false
+
+databases:
+  - name: raid-nexus-postgres
+    databaseName: raidnexus
+    user: raidnexus
+    plan: free
+    region: singapore

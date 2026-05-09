@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 
-from core.config import isoformat_utc
+from core.config import isoformat_utc, settings
 from repositories.ambulance_repo import AmbulanceRepository
 from repositories.dispatch_repo import DispatchRepository
 from repositories.hospital_repo import HospitalRepository
@@ -13,6 +14,14 @@ from repositories.incident_repo import IncidentRepository
 from services.dispatch import MANUAL_ESCALATION_TEXT, select_dispatch
 from services.geo_service import get_active_traffic_multiplier, is_coordinate_in_city, same_city
 from services.routing import get_route_polyline, get_travel_time
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _alternate_route_geometry_enabled() -> bool:
+    return settings.RAID_ENABLE_ALTERNATE_ROUTE_GEOMETRY or _env_flag("RAID_ENABLE_ALTERNATE_ROUTE_GEOMETRY")
 
 
 def _lnglat(lat: float, lng: float) -> list[float]:
@@ -252,20 +261,21 @@ async def build_dispatch_map_context(
     alternate_routes: list[dict[str, Any]] = []
     alternate_options = [item for item in ambulance_options if item["ambulance_id"] != dispatch_plan["ambulance_id"]]
     ambulance_by_id = {item["id"]: item for item in all_ambulances}
-    for option in alternate_options[:3]:
-        alternate_ambulance = ambulance_by_id.get(option["ambulance_id"])
-        if alternate_ambulance is None:
-            continue
-        alternate_coordinates = await _route_coordinates(alternate_ambulance, incident, hospital)
-        alternate_routes.append(
-            {
-                "ambulance_id": option["ambulance_id"],
-                "hospital_id": hospital["id"],
-                "eta_minutes": option["total_eta_minutes"],
-                "score": option["score"],
-                "coordinates": alternate_coordinates,
-            }
-        )
+    if _alternate_route_geometry_enabled():
+        for option in alternate_options[:3]:
+            alternate_ambulance = ambulance_by_id.get(option["ambulance_id"])
+            if alternate_ambulance is None:
+                continue
+            alternate_coordinates = await _route_coordinates(alternate_ambulance, incident, hospital)
+            alternate_routes.append(
+                {
+                    "ambulance_id": option["ambulance_id"],
+                    "hospital_id": hospital["id"],
+                    "eta_minutes": option["total_eta_minutes"],
+                    "score": option["score"],
+                    "coordinates": alternate_coordinates,
+                }
+            )
 
     return {
         "route": {

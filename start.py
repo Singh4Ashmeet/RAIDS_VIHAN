@@ -6,7 +6,8 @@ Usage:
 
 Starts the FastAPI backend and React/Vite frontend together, wires the
 frontend to the selected backend through VITE_API_BASE_URL, and prints the
-current application routes for the admin and user portals.
+current application routes for the admin and user portals. Optional C++,
+Java, and C# modules are detected and verified without blocking the main app.
 """
 
 from __future__ import annotations
@@ -15,9 +16,11 @@ import argparse
 import json
 import os
 import signal
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -33,6 +36,14 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
+OPTIMIZER_CPP = ROOT / "optimizer_cpp"
+JAVA_DRIVER = ROOT / "mobile_driver_java"
+CSHARP_SIMULATION = ROOT / "simulation_csharp"
+CPP_BUILD_DIR = OPTIMIZER_CPP / "build"
+CPP_OPTIMIZER = CPP_BUILD_DIR / ("raid_optimizer.exe" if os.name == "nt" else "raid_optimizer")
+CPP_RELEASE_OPTIMIZER = CPP_BUILD_DIR / "Release" / ("raid_optimizer.exe" if os.name == "nt" else "raid_optimizer")
+JAVA_DRIVER_CLIENT = JAVA_DRIVER / "src" / "main" / "java" / "in" / "raidnexus" / "driver" / "DriverClient.java"
+CSHARP_PROJECT = CSHARP_SIMULATION / "RaidNexusSimulation.csproj"
 
 if load_dotenv is not None:
     load_dotenv(BACKEND / ".env")
@@ -43,6 +54,13 @@ RED = "\033[91m"
 CYAN = "\033[96m"
 RESET = "\033[0m"
 BOLD = "\033[1m"
+
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        try:
+            stream.reconfigure(errors="replace", line_buffering=True)
+        except Exception:
+            pass
 
 ADMIN_ROUTES = [
     "/admin/command",
@@ -87,7 +105,10 @@ def prefix_stream(proc: subprocess.Popen, label: str, color: str) -> None:
     for line in iter(proc.stdout.readline, b""):
         text = line.decode("utf-8", errors="replace").rstrip()
         if text:
-            print(f"  {color}[{label}]{RESET} {text}")
+            output = f"  {color}[{label}]{RESET} {text}"
+            encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+            safe_output = output.encode(encoding, errors="replace").decode(encoding, errors="replace")
+            print(safe_output, flush=True)
 
 
 def check_dirs() -> None:
@@ -130,6 +151,221 @@ def find_npm() -> str:
     sys.exit(1)
 
 
+def find_tool(*names: str) -> str | None:
+    """Return the first executable found on PATH."""
+
+    for name in names:
+        candidate = shutil.which(name)
+        if candidate:
+            return candidate
+    if os.name == "nt" and not getattr(find_tool, "_path_refreshed", False):
+        try:
+            completed = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + "
+                    "[Environment]::GetEnvironmentVariable('Path','User')",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if completed.returncode == 0 and completed.stdout.strip():
+                os.environ["PATH"] = completed.stdout.strip()
+        except Exception:
+            pass
+        setattr(find_tool, "_path_refreshed", True)
+        for name in names:
+            candidate = shutil.which(name)
+            if candidate:
+                return candidate
+    return None
+
+
+def run_capture(
+    command: list[str],
+    *,
+    cwd: Path = ROOT,
+    timeout: int = 60,
+    env: dict[str, str] | None = None,
+) -> tuple[bool, str]:
+    """Run a helper command and return success plus compact output."""
+
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except FileNotFoundError as exc:
+        return False, str(exc)
+    except subprocess.TimeoutExpired:
+        return False, f"Timed out after {timeout}s"
+
+    output = "\n".join(
+        part.strip()
+        for part in (completed.stdout, completed.stderr)
+        if part and part.strip()
+    )
+    return completed.returncode == 0, output or f"exit={completed.returncode}"
+
+
+def ensure_cpp_optimizer(build_optional: bool) -> tuple[bool, str]:
+    """Ensure the optional C++ optimizer binary exists."""
+
+    if CPP_OPTIMIZER.is_file():
+        return True, str(CPP_OPTIMIZER)
+    if CPP_RELEASE_OPTIMIZER.is_file():
+        CPP_BUILD_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(CPP_RELEASE_OPTIMIZER, CPP_OPTIMIZER)
+        return True, str(CPP_OPTIMIZER)
+    if not build_optional:
+        return False, "raid_optimizer binary not found; build skipped"
+
+    cmake = find_tool("cmake")
+    if cmake is None:
+        return False, "cmake not found"
+
+    configure = [cmake, "-S", str(OPTIMIZER_CPP), "-B", str(CPP_BUILD_DIR)]
+    generator = os.getenv("RAID_CMAKE_GENERATOR")
+    arch = os.getenv("RAID_CMAKE_ARCH")
+    if generator:
+        configure.extend(["-G", generator])
+    if arch:
+        configure.extend(["-A", arch])
+
+    ok, output = run_capture(configure, timeout=180)
+    if not ok:
+        return False, f"CMake configure failed: {output.splitlines()[-1] if output else 'unknown error'}"
+
+    ok, output = run_capture([cmake, "--build", str(CPP_BUILD_DIR), "--config", "Release"], timeout=240)
+    if not ok:
+        return False, f"CMake build failed: {output.splitlines()[-1] if output else 'unknown error'}"
+
+    if CPP_RELEASE_OPTIMIZER.is_file():
+        shutil.copy2(CPP_RELEASE_OPTIMIZER, CPP_OPTIMIZER)
+    if CPP_OPTIMIZER.is_file():
+        return True, str(CPP_OPTIMIZER)
+    return False, "C++ build completed but raid_optimizer was not found"
+
+
+def verify_cpp_connection(python_cmd: str, build_optional: bool) -> tuple[bool, str]:
+    """Verify FastAPI can reach the optional C++ optimizer through the adapter."""
+
+    ok, detail = ensure_cpp_optimizer(build_optional)
+    if not ok:
+        return False, detail
+
+    probe = f"""
+import sys
+sys.path.insert(0, {str(BACKEND)!r})
+from services.cpp_adapter import optimize_dispatch
+result = optimize_dispatch(
+    {{"id": "INC-START", "location_lat": 28.6139, "location_lng": 77.2090}},
+    [
+        {{"id": "AMB-FAR", "status": "available", "lat": 28.8, "lng": 77.3}},
+        {{"id": "AMB-NEAR", "status": "available", "lat": 28.614, "lng": 77.209}},
+    ],
+)
+assignment = result.get("assignment") or {{}}
+print(result.get("status"), assignment.get("ambulance_id"), assignment.get("optimizer"))
+"""
+    ok, output = run_capture([python_cmd, "-c", probe], timeout=30)
+    if ok and "success AMB-NEAR" in output:
+        return True, output.strip()
+    return False, output.strip()
+
+
+def verify_java_connection() -> tuple[bool, str]:
+    """Compile-check the Java driver client scaffold."""
+
+    if not JAVA_DRIVER_CLIENT.is_file():
+        return False, f"{JAVA_DRIVER_CLIENT} not found"
+    javac = find_tool("javac")
+    if javac is None:
+        return False, "javac not found"
+
+    with tempfile.TemporaryDirectory(prefix="raid-java-") as temp_dir:
+        ok, output = run_capture(
+            [javac, "-d", temp_dir, str(JAVA_DRIVER_CLIENT)],
+            timeout=60,
+        )
+    if ok:
+        return True, "DriverClient.java compiled"
+    return False, output.splitlines()[-1] if output else "javac failed"
+
+
+def verify_csharp_connection(backend_url: str) -> tuple[bool, str]:
+    """Build and run the C# simulation scaffold against the active backend."""
+
+    if not CSHARP_PROJECT.is_file():
+        return False, f"{CSHARP_PROJECT} not found"
+    dotnet = find_tool("dotnet")
+    if dotnet is None:
+        return False, "dotnet not found"
+
+    env = os.environ.copy()
+    env["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
+    with tempfile.TemporaryDirectory(prefix="raid-dotnet-out-") as out_dir, tempfile.TemporaryDirectory(
+        prefix="raid-dotnet-obj-"
+    ) as obj_dir:
+        out_path = Path(out_dir)
+        obj_path = Path(obj_dir)
+        ok, output = run_capture(
+            [
+                dotnet,
+                "build",
+                str(CSHARP_PROJECT),
+                "-c",
+                "Release",
+                "-o",
+                str(out_path),
+                f"/p:BaseIntermediateOutputPath={obj_path}{os.sep}",
+                f"/p:IntermediateOutputPath={obj_path}{os.sep}intermediate{os.sep}",
+            ],
+            timeout=180,
+            env=env,
+        )
+        if not ok:
+            return False, output.splitlines()[-1] if output else "dotnet build failed"
+
+        (out_path / "appsettings.json").write_text(
+            json.dumps({"API_BASE_URL": backend_url}, indent=2),
+            encoding="utf-8",
+        )
+        dll_path = out_path / "RaidNexusSimulation.dll"
+        ok, output = run_capture([dotnet, str(dll_path)], cwd=out_path, timeout=30, env=env)
+    if ok and ": ok" in output:
+        return True, output.strip()
+    return False, output.strip()
+
+
+def verify_multilanguage_connections(
+    backend_url: str,
+    python_cmd: str,
+    *,
+    build_optional: bool,
+) -> None:
+    """Run non-blocking C++, Java, and C# module connection checks."""
+
+    print(f"\n{BOLD}Checking multi-language connections...{RESET}")
+    checks = [
+        ("C++ optimizer", lambda: verify_cpp_connection(python_cmd, build_optional)),
+        ("Java driver", verify_java_connection),
+        ("C# simulation", lambda: verify_csharp_connection(backend_url)),
+    ]
+    for label, check in checks:
+        ok, detail = check()
+        color = GREEN if ok else YELLOW
+        prefix = "OK" if ok else "WARN"
+        print(f"  {color}[{prefix}] {label:<14}{RESET} {detail}")
+
+
 def check_frontend_dependencies() -> None:
     if not (FRONTEND / "node_modules").is_dir():
         print(f"  {YELLOW}[WARN]{RESET} frontend/node_modules not found. Running npm install first may be required.")
@@ -157,6 +393,13 @@ def start_backend(port: int, host: str, python_cmd: str) -> subprocess.Popen:
     print(f"  {GREEN}[BACKEND]{RESET} Starting FastAPI on http://{host}:{port}...")
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    env.setdefault("RAID_DISABLE_SIMULATION", "1")
+    env.setdefault("RAID_DISABLE_EXTERNAL_ROUTING", "1")
+    env.setdefault("RAID_DISABLE_ROUTE_GEOMETRY", "0")
+    env.setdefault("RAID_LIGHTWEIGHT_TRIAGE", "1")
+    env.setdefault("ENABLE_NLP_TRIAGE", "false")
+    env.setdefault("ENABLE_TRANSLATION", "false")
+    env.setdefault("USE_LLM", "false")
     proc = subprocess.Popen(
         [
             python_cmd,
@@ -223,25 +466,50 @@ def http_status(url: str, headers: dict[str, str] | None = None, timeout: int = 
         return False, str(exc)
 
 
+def retry_http_status(
+    url: str,
+    headers: dict[str, str] | None = None,
+    *,
+    timeout: int = 10,
+    attempts: int = 4,
+    delay: float = 0.75,
+) -> tuple[bool, str]:
+    """Retry transient startup-time HTTP checks before reporting status."""
+
+    last_status = ""
+    for _ in range(attempts):
+        ok, status_text = http_status(url, headers=headers, timeout=timeout)
+        if ok:
+            return True, status_text
+        last_status = status_text
+        time.sleep(delay)
+    return False, last_status
+
+
 def admin_auth_headers(backend_url: str) -> dict[str, str] | None:
     username = os.getenv("ADMIN_USERNAME", "admin")
     password = os.getenv("ADMIN_PASSWORD", "admin123")
     body = urlencode({"username": username, "password": password}).encode("utf-8")
-    try:
-        request = Request(
-            f"{backend_url}/api/auth/login",
-            data=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            method="POST",
-        )
-        with urlopen(request, timeout=5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        token_payload = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-        token = token_payload.get("access_token")
-        if token:
-            return {"Authorization": f"Bearer {token}"}
-    except Exception as exc:
-        print(f"  {YELLOW}[WARN]{RESET} Admin login check failed: {exc}")
+    last_error = "unknown error"
+    for _ in range(4):
+        try:
+            request = Request(
+                f"{backend_url}/api/auth/login",
+                data=body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            with urlopen(request, timeout=15) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            token_payload = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+            token = token_payload.get("access_token")
+            if token:
+                return {"Authorization": f"Bearer {token}"}
+            last_error = "token missing"
+        except Exception as exc:
+            last_error = str(exc)
+            time.sleep(0.75)
+    print(f"  {YELLOW}[WARN]{RESET} Admin login check failed after retries: {last_error}")
     return None
 
 
@@ -284,6 +552,8 @@ def verify_core_endpoints(backend_url: str) -> None:
     admin_headers = admin_auth_headers(backend_url)
     checks = [
         ("Health", f"{backend_url}/health", None),
+        ("OpenAPI", f"{backend_url}/openapi.json", None),
+        ("API Docs", f"{backend_url}/docs", None),
         ("Analytics", f"{backend_url}/api/analytics", None),
         ("Benchmark", f"{backend_url}/api/benchmark", None),
         (
@@ -293,7 +563,7 @@ def verify_core_endpoints(backend_url: str) -> None:
         ),
     ]
     for label, url, headers in checks:
-        ok, status_text = http_status(url, headers=headers)
+        ok, status_text = retry_http_status(url, headers=headers, timeout=10, attempts=4)
         color = GREEN if ok else YELLOW
         print(f"  {color}[{label}]{RESET} {status_text}")
 
@@ -332,6 +602,32 @@ def main() -> None:
     parser.add_argument("--host-frontend", default="127.0.0.1")
     parser.add_argument("--skip-frontend", action="store_true", help="Start backend only")
     parser.add_argument("--skip-checks", action="store_true", help="Skip post-start HTTP checks")
+    parser.add_argument("--skip-multilang", action="store_true", help="Skip optional C++/Java/C# checks")
+    parser.add_argument(
+        "--enable-simulation",
+        action="store_true",
+        help="Allow the background simulation loop during local startup",
+    )
+    parser.add_argument(
+        "--enable-heavy-ai",
+        action="store_true",
+        help="Allow NLP and translation model preloads during local startup",
+    )
+    parser.add_argument(
+        "--enable-external-routing",
+        action="store_true",
+        help="Allow live OSRM route lookups instead of deterministic local fallback routing",
+    )
+    parser.add_argument(
+        "--disable-route-geometry",
+        action="store_true",
+        help="Use straight-line map fallbacks instead of OSRM road polylines",
+    )
+    parser.add_argument(
+        "--skip-optional-builds",
+        action="store_true",
+        help="Do not build optional C++/.NET modules during startup checks",
+    )
     args = parser.parse_args()
 
     banner()
@@ -339,6 +635,16 @@ def main() -> None:
     check_frontend_dependencies()
     warn_if_benchmark_missing()
     warn_if_synthetic_incidents_missing()
+
+    os.environ.setdefault("USE_LLM", "false")
+    os.environ["RAID_DISABLE_SIMULATION"] = "false" if args.enable_simulation else "1"
+    os.environ["RAID_DISABLE_EXTERNAL_ROUTING"] = (
+        "0" if args.enable_external_routing else "1"
+    )
+    os.environ["RAID_DISABLE_ROUTE_GEOMETRY"] = "1" if args.disable_route_geometry else "0"
+    os.environ["RAID_LIGHTWEIGHT_TRIAGE"] = "0" if args.enable_heavy_ai else "1"
+    os.environ["ENABLE_NLP_TRIAGE"] = "true" if args.enable_heavy_ai else "false"
+    os.environ["ENABLE_TRANSLATION"] = "true" if args.enable_heavy_ai else "false"
 
     python_cmd = find_python()
     npm_cmd = find_npm()
@@ -377,6 +683,13 @@ def main() -> None:
         print(f"  {GREEN}[BACKEND]{RESET} Waiting for API health...")
         if wait_for_http(f"{backend_url}/health", timeout=45, label="backend"):
             print(f"  {GREEN}[BACKEND]{RESET} {BOLD}Ready{RESET} - {backend_url}/docs\n")
+
+    if not args.skip_multilang:
+        verify_multilanguage_connections(
+            backend_url,
+            python_cmd,
+            build_optional=not args.skip_optional_builds,
+        )
 
     if not args.skip_frontend:
         if is_port_open(args.host_frontend, frontend_port):
