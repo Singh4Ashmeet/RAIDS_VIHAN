@@ -53,6 +53,7 @@ npm run dev
 | `ENABLE_NLP_TRIAGE`, `ENABLE_TRANSLATION` | Heavy model feature flags. Disable for lightweight deployments. |
 | `RAID_LIGHTWEIGHT_TRIAGE` | Uses keyword triage path when enabled. |
 | `RAID_DISABLE_SIMULATION` | Disables background simulation loop for tests and CI. |
+| `RAID_SKIP_STARTUP_MIGRATIONS` | Skips in-app Alembic migration when a container preflight already ran it. |
 | `TOMTOM_API_KEY`, `OSRM_URL` | Optional traffic/routing providers. |
 | `VITE_API_BASE_URL`, `VITE_WS_URL` | Frontend REST and WebSocket targets. |
 

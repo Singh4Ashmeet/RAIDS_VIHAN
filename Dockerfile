@@ -21,4 +21,4 @@ COPY --from=frontend /app/frontend/dist ./frontend/dist
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "if [ \"$ENVIRONMENT\" = \"production\" ]; then cd backend && alembic upgrade head && cd /app; fi && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "if [ \"$ENVIRONMENT\" = \"production\" ]; then cd backend && alembic upgrade head && cd /app && export RAID_SKIP_STARTUP_MIGRATIONS=1; fi && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

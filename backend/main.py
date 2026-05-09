@@ -77,6 +77,12 @@ FRONTEND_RESERVED_PATHS = {"api", "docs", "health", "openapi.json", "redoc", "ws
 BENCHMARK_RESULTS_FILE = DATA_DIR / "benchmark_results.json"
 LITERATURE_COMPARISON_FILE = DATA_DIR / "literature_comparison.json"
 _BENCHMARK_CACHE: dict[str, object] = {}
+SKIP_STARTUP_MIGRATIONS = os.getenv("RAID_SKIP_STARTUP_MIGRATIONS", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 LIGHTWEIGHT_TRIAGE = (not settings.ENABLE_NLP_TRIAGE) or os.getenv("RAID_LIGHTWEIGHT_TRIAGE", "").strip().lower() in {
     "1",
     "true",
@@ -575,9 +581,11 @@ async def lifespan(app: FastAPI):
         DISABLE_EXTERNAL_ROUTING,
         DISABLE_ROUTE_GEOMETRY,
     )
-    if settings.ENVIRONMENT == "production" and IS_POSTGRES:
+    if settings.ENVIRONMENT == "production" and IS_POSTGRES and not SKIP_STARTUP_MIGRATIONS:
         await asyncio.to_thread(run_migrations)
         logger.info("Database migrations applied")
+    elif settings.ENVIRONMENT == "production" and IS_POSTGRES:
+        logger.info("Startup migrations skipped; container preflight migrations already ran.")
     await initialize_database()
     inserted = await load_seed_data()
     totals = {
