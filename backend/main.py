@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -458,9 +458,9 @@ async def favicon() -> Response:
 
 async def trigger_dispatch(
     request: Request,
-    payload: DispatchRequest,
     response: Response,
     background_tasks: BackgroundTasks,
+    payload: DispatchRequest = Body(...),
 ) -> dict[str, Any] | JSONResponse:
     """Select and execute a dispatch using the formal multi-objective scorer."""
 
@@ -531,6 +531,14 @@ async def trigger_dispatch(
 
     response.status_code = status.HTTP_200_OK
     return success(dispatch_plan)
+
+
+trigger_dispatch.__annotations__.update({
+    "request": Request,
+    "response": Response,
+    "background_tasks": BackgroundTasks,
+    "payload": DispatchRequest,
+})
 
 
 def run_migrations() -> None:
