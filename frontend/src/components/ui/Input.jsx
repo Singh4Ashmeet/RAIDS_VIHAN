@@ -6,6 +6,7 @@ export default function Input({
 }) {
   const generatedId = useId()
   const inputId = rest.id || generatedId
+  const hideNativePasswordToggle = Boolean(rightElement && rest.type === 'password')
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -23,6 +24,7 @@ export default function Input({
         )}
         <input
           id={inputId}
+          data-hide-native-password-toggle={hideNativePasswordToggle ? 'true' : undefined}
           className={clsx(
             'w-full bg-slate-800 border border-border rounded-xl',
             'px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500',

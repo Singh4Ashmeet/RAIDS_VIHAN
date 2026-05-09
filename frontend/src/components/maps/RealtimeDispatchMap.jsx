@@ -138,6 +138,89 @@ function coordinatesOf(item, latKey, lngKey) {
   return [lng, lat]
 }
 
+function validLngLat(coordinate) {
+  if (!Array.isArray(coordinate) || coordinate.length < 2) return false
+  const lng = Number(coordinate[0])
+  const lat = Number(coordinate[1])
+  return Number.isFinite(lng) && Number.isFinite(lat)
+}
+
+function distanceMeters(start, end) {
+  const startLng = Number(start[0])
+  const startLat = Number(start[1])
+  const endLng = Number(end[0])
+  const endLat = Number(end[1])
+  const toRadians = Math.PI / 180
+  const earthRadiusMeters = 6371000
+  const deltaLat = (endLat - startLat) * toRadians
+  const deltaLng = (endLng - startLng) * toRadians
+  const a = Math.sin(deltaLat / 2) ** 2
+    + Math.cos(startLat * toRadians) * Math.cos(endLat * toRadians)
+    * Math.sin(deltaLng / 2) ** 2
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function bearingDegrees(start, end) {
+  const startLng = Number(start[0]) * Math.PI / 180
+  const startLat = Number(start[1]) * Math.PI / 180
+  const endLng = Number(end[0]) * Math.PI / 180
+  const endLat = Number(end[1]) * Math.PI / 180
+  const deltaLng = endLng - startLng
+  const y = Math.sin(deltaLng) * Math.cos(endLat)
+  const x = Math.cos(startLat) * Math.sin(endLat)
+    - Math.sin(startLat) * Math.cos(endLat) * Math.cos(deltaLng)
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
+}
+
+function interpolateRoutePosition(coordinates, progress) {
+  const safeCoordinates = (coordinates || []).filter(validLngLat)
+  if (safeCoordinates.length < 2) return null
+
+  const segments = []
+  let totalDistance = 0
+  for (let index = 1; index < safeCoordinates.length; index += 1) {
+    const start = safeCoordinates[index - 1]
+    const end = safeCoordinates[index]
+    const length = distanceMeters(start, end)
+    if (length <= 0) continue
+    segments.push({ start, end, length })
+    totalDistance += length
+  }
+  if (!segments.length || totalDistance <= 0) {
+    return { coordinate: safeCoordinates[0], bearing: 0 }
+  }
+
+  const targetDistance = Math.max(0, Math.min(1, progress)) * totalDistance
+  let traversed = 0
+  for (const segment of segments) {
+    if (traversed + segment.length >= targetDistance) {
+      const segmentProgress = (targetDistance - traversed) / segment.length
+      return {
+        coordinate: [
+          segment.start[0] + ((segment.end[0] - segment.start[0]) * segmentProgress),
+          segment.start[1] + ((segment.end[1] - segment.start[1]) * segmentProgress),
+        ],
+        bearing: bearingDegrees(segment.start, segment.end),
+      }
+    }
+    traversed += segment.length
+  }
+
+  const finalSegment = segments[segments.length - 1]
+  return {
+    coordinate: finalSegment.end,
+    bearing: bearingDegrees(finalSegment.start, finalSegment.end),
+  }
+}
+
+function makeRouteAmbulanceElement(route) {
+  const element = makeMarkerElement('ambulance', { id: route?.ambulance_id }, true)
+  element.classList.add('is-route-runner')
+  const icon = element.querySelector('.raid-map-marker-icon')
+  if (icon) icon.textContent = '>'
+  return element
+}
+
 function pointFeature(coordinates, properties) {
   if (!coordinates) return null
   return {
@@ -396,6 +479,72 @@ function useMarkerSync(mapRef, markersRef, animationsRef, collectionKey, items, 
   }, [animationsRef, collectionKey, getCoordinates, items, mapRef, markersRef, options])
 }
 
+function useRouteRunner(mapRef, runnerRef, route, mapLoaded) {
+  const routeKey = [
+    route?.dispatch_id || '',
+    route?.ambulance_id || '',
+    route?.coordinates?.length || 0,
+    route?.coordinates?.[0]?.join(',') || '',
+    route?.coordinates?.[route?.coordinates?.length - 1]?.join(',') || '',
+  ].join('|')
+
+  useEffect(() => {
+    const cleanup = () => {
+      if (runnerRef.current?.frameId) {
+        cancelAnimationFrame(runnerRef.current.frameId)
+      }
+      runnerRef.current?.marker?.remove()
+      runnerRef.current = null
+    }
+
+    const map = mapRef.current
+    const coordinates = (route?.coordinates || []).filter(validLngLat)
+    if (!map || !mapLoaded || !route?.ambulance_id || coordinates.length < 2) {
+      cleanup()
+      return cleanup
+    }
+
+    cleanup()
+    const element = makeRouteAmbulanceElement(route)
+    const initialPosition = interpolateRoutePosition(coordinates, 0)
+    if (!initialPosition) return cleanup
+
+    const marker = new maplibregl.Marker({ element, anchor: 'center' })
+      .setLngLat(initialPosition.coordinate)
+      .addTo(map)
+    element.style.setProperty('--route-bearing', `${initialPosition.bearing - 90}deg`)
+
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion) {
+      runnerRef.current = { marker, frameId: null }
+      return cleanup
+    }
+
+    const etaMinutes = Number(route.eta_minutes || 0)
+    const duration = Math.max(12000, Math.min(36000, etaMinutes > 0 ? etaMinutes * 700 : 18000))
+    const startedAt = performance.now()
+
+    const frame = (now) => {
+      const progress = ((now - startedAt) % duration) / duration
+      const position = interpolateRoutePosition(coordinates, progress)
+      if (position) {
+        marker.setLngLat(position.coordinate)
+        element.style.setProperty('--route-bearing', `${position.bearing - 90}deg`)
+      }
+      runnerRef.current = {
+        marker,
+        frameId: requestAnimationFrame(frame),
+      }
+    }
+
+    runnerRef.current = {
+      marker,
+      frameId: requestAnimationFrame(frame),
+    }
+    return cleanup
+  }, [mapLoaded, mapRef, route, routeKey, runnerRef])
+}
+
 function ModeToggle({ simulationMode, setSimulationMode }) {
   return (
     <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-700 bg-slate-950/80 p-1">
@@ -500,6 +649,7 @@ export default function RealtimeDispatchMap({
   const mapRef = useRef(null)
   const markersRef = useRef({})
   const animationsRef = useRef(new Map())
+  const routeRunnerRef = useRef(null)
   const routeFitKeyRef = useRef('')
 
   const incidents = useDispatchStore((state) => state.incidents)
@@ -559,6 +709,12 @@ export default function RealtimeDispatchMap({
     const selectedAmbulance = ambulances.find((item) => item.id === scopedActiveRoute?.ambulance_id)
     return mergeUniqueById(cityAmbulances, selectedAmbulance ? [selectedAmbulance] : [])
   }, [ambulances, assignedAmbulanceId, city, mode, scopedActiveRoute?.ambulance_id])
+
+  const routeRunnerActive = Boolean(scopedActiveRoute?.ambulance_id && scopedActiveRoute?.coordinates?.length > 1)
+  const markerAmbulances = useMemo(() => {
+    if (!routeRunnerActive) return visibleAmbulances
+    return visibleAmbulances.filter((item) => item.id !== scopedActiveRoute.ambulance_id)
+  }, [routeRunnerActive, scopedActiveRoute?.ambulance_id, visibleAmbulances])
 
   const visibleIncidents = useMemo(() => {
     if (mode === 'user') {
@@ -630,6 +786,10 @@ export default function RealtimeDispatchMap({
 
     return () => {
       animationsRef.current.forEach((id) => cancelAnimationFrame(id))
+      if (routeRunnerRef.current?.frameId) {
+        cancelAnimationFrame(routeRunnerRef.current.frameId)
+      }
+      routeRunnerRef.current?.marker?.remove()
       mapRef.current?.remove()
       mapRef.current = null
     }
@@ -723,7 +883,7 @@ export default function RealtimeDispatchMap({
     markersRef,
     animationsRef,
     'ambulances',
-    visibleAmbulances,
+    markerAmbulances,
     (item) => coordinatesOf(item, 'current_lat', 'current_lng'),
     {
       kind: 'ambulance',
@@ -754,6 +914,8 @@ export default function RealtimeDispatchMap({
       muted: (item) => item.status === 'resolved',
     }
   )
+
+  useRouteRunner(mapRef, routeRunnerRef, scopedActiveRoute, mapLoaded)
 
   useMarkerSync(
     mapRef,
