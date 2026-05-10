@@ -19,6 +19,9 @@ export default function Modal({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
             className="bg-card rounded-2xl shadow-2xl border
               border-border w-full max-w-lg"
             onClick={e => e.stopPropagation()}

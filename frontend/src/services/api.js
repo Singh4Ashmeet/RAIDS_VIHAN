@@ -200,13 +200,25 @@ export async function createIncident(body) {
   }
 }
 
-export async function triggerScenario(type) {
-  const result = await postJson('/simulate/scenario', { type })
+export async function triggerScenario(type, options = {}) {
+  const body = typeof type === 'object' && type !== null
+    ? type
+    : { type, ...options }
+  const result = await postJson('/simulate/scenario', body)
   const payload = unwrapEnvelope(result)
   return {
     ...payload,
     dispatch_plan: unwrapDispatch(payload?.dispatch_plan),
   }
+}
+
+export async function setTrafficOverride({ city = 'Delhi', multiplier = 1, duration_seconds = 300 }) {
+  const result = await postJson('/simulate/traffic', {
+    city,
+    multiplier,
+    duration_seconds,
+  })
+  return unwrapEnvelope(result)
 }
 
 export async function triggerDispatch(incidentId) {

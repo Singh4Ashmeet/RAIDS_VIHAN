@@ -441,6 +441,21 @@ function useMarkerSync(mapRef, markersRef, animationsRef, collectionKey, items, 
 
       entry.element.classList.toggle('is-selected', selected)
       entry.element.classList.toggle('is-muted', Boolean(options.muted?.(item)))
+      if (options.kind === 'ambulance') {
+        entry.element.classList.toggle('is-en-route', ['en_route', 'dispatched', 'transporting'].includes(item.status))
+        entry.element.classList.toggle('is-at-scene', ['at_scene', 'at_hospital'].includes(item.status))
+      }
+      if (options.kind === 'incident') {
+        entry.element.classList.toggle('is-priority-critical', ['critical', 'P1'].includes(item.severity || item.priority))
+        entry.element.classList.toggle('is-priority-urgent', ['high', 'P2'].includes(item.severity || item.priority))
+        entry.element.classList.toggle('is-resolved', item.status === 'resolved')
+      }
+      if (options.kind === 'hospital') {
+        const load = Number(item.occupancy_pct ?? item.loadPercent ?? 0)
+        entry.element.classList.toggle('is-load-amber', load >= 70 && load < 90)
+        entry.element.classList.toggle('is-load-red', load >= 90 || Boolean(item.diversion_status))
+        entry.element.classList.toggle('is-load-green', load < 70 && !item.diversion_status)
+      }
 
       if (options.animate) {
         const current = entry.marker.getLngLat()
@@ -642,7 +657,13 @@ export default function RealtimeDispatchMap({
   title,
   selectedIncidentId,
   onSelectIncident,
+  serviceCity,
+  onServiceCityChange,
+  onMapClick,
   showScenarioControls = true,
+  showStatusPanel = true,
+  showRouteSummary = true,
+  fillHeight = false,
   className,
 }) {
   const mapContainerRef = useRef(null)
@@ -680,7 +701,8 @@ export default function RealtimeDispatchMap({
   const selectedIncidentById = incidents.find((item) => item.id === selectedIncidentId)
   const routeHospital = hospitals.find((item) => item.id === activeRoute?.hospital_id || item.id === dispatch?.hospital_id)
   const assignedAmbulanceId = activeRoute?.ambulance_id || dispatch?.ambulance_id
-  const city = manualCity
+  const city = serviceCity
+    || manualCity
     || activeRoute?.service_city
     || selectedIncidentById?.city
     || routeIncident?.city
@@ -760,6 +782,22 @@ export default function RealtimeDispatchMap({
       setSelectedAmbulance(null)
     }
   }, [city, selectedAmbulance])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !onMapClick) return undefined
+    const handleClick = (event) => {
+      onMapClick({
+        lat: Number(event.lngLat.lat),
+        lng: Number(event.lngLat.lng),
+        city,
+      })
+    }
+    map.on('click', handleClick)
+    return () => {
+      map.off('click', handleClick)
+    }
+  }, [city, onMapClick])
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current || isJsdom()) return undefined
@@ -844,6 +882,14 @@ export default function RealtimeDispatchMap({
       .filter(Boolean)
     updateGeoJsonSource(map, 'demand-hotspots', featureCollection(demandFeatures))
   }, [demandData, mapLoaded, scopedActiveRoute, scopedAlternateRoutes, scopedRouteChange, visibleIncidents])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapLoaded || !map.getLayer('main-route-line')) return
+    const multiplier = Number(scopedActiveRoute?.traffic_multiplier || trafficMultiplier || 1)
+    const routeColor = multiplier >= 2.2 ? '#ff4757' : multiplier >= 1.4 ? '#f6a623' : '#00d4aa'
+    map.setPaintProperty('main-route-line', 'line-color', routeColor)
+  }, [mapLoaded, scopedActiveRoute?.traffic_multiplier, trafficMultiplier])
 
   useEffect(() => {
     const map = mapRef.current
@@ -987,7 +1033,11 @@ export default function RealtimeDispatchMap({
         ref={mapContainerRef}
         className={clsx(
           'w-full',
-          isFullscreen ? 'h-screen min-h-screen' : 'h-[68vh] min-h-[620px] max-h-[780px]'
+          isFullscreen
+            ? 'h-screen min-h-screen'
+            : fillHeight
+              ? 'h-full min-h-[680px]'
+              : 'h-[68vh] min-h-[620px] max-h-[780px]'
         )}
       />
 
@@ -999,6 +1049,7 @@ export default function RealtimeDispatchMap({
         </div>
       ) : null}
 
+      {showStatusPanel ? (
       <div className="absolute left-3 top-3 w-[calc(100%-5.5rem)] max-w-[340px] rounded-xl border border-slate-700 bg-slate-950/88 p-3 shadow-xl shadow-black/30 backdrop-blur sm:left-4 sm:top-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -1026,6 +1077,7 @@ export default function RealtimeDispatchMap({
               value={city}
               onChange={(event) => {
                 setManualCity(event.target.value)
+                onServiceCityChange?.(event.target.value)
                 onSelectIncident?.('')
               }}
               className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
@@ -1082,6 +1134,7 @@ export default function RealtimeDispatchMap({
           </div>
         )}
       </div>
+      ) : null}
 
       <div className="absolute right-3 top-3 flex gap-2 sm:right-4 sm:top-4">
         <button
@@ -1104,7 +1157,7 @@ export default function RealtimeDispatchMap({
         </button>
       </div>
 
-      {scopedActiveRoute ? (
+      {showRouteSummary && scopedActiveRoute ? (
         <div className="absolute bottom-3 left-3 right-3 rounded-xl border border-slate-700 bg-slate-950/90 p-3 shadow-xl shadow-black/35 backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-[380px]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -1134,7 +1187,7 @@ export default function RealtimeDispatchMap({
         </div>
       ) : null}
 
-      {!scopedActiveRoute && blockedRouteMessage ? (
+      {showRouteSummary && !scopedActiveRoute && blockedRouteMessage ? (
         <div className="absolute bottom-3 left-3 right-3 rounded-xl border border-red-500/35 bg-red-950/90 p-3 text-sm text-red-100 shadow-xl shadow-black/35 backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-[380px]">
           <div className="flex items-start gap-2">
             <AlertTriangle size={16} className="mt-0.5 shrink-0 text-red-300" />

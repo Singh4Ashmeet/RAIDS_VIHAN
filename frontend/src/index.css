@@ -113,6 +113,32 @@ input[data-hide-native-password-toggle="true"]::-ms-clear {
   background: rgba(16, 185, 129, 0.16);
 }
 
+.raid-map-marker-ambulance.is-en-route {
+  border-color: rgba(246, 166, 35, 0.62);
+}
+
+.raid-map-marker-ambulance.is-en-route::before {
+  background: rgba(246, 166, 35, 0.2);
+}
+
+.raid-map-marker-ambulance.is-en-route .raid-map-marker-icon {
+  background: rgba(246, 166, 35, 0.18);
+  color: #fcd34d;
+}
+
+.raid-map-marker-ambulance.is-at-scene {
+  border-color: rgba(255, 71, 87, 0.62);
+}
+
+.raid-map-marker-ambulance.is-at-scene::before {
+  background: rgba(255, 71, 87, 0.18);
+}
+
+.raid-map-marker-ambulance.is-at-scene .raid-map-marker-icon {
+  background: rgba(255, 71, 87, 0.18);
+  color: #fda4af;
+}
+
 .raid-map-marker-incident {
   border-color: rgba(239, 68, 68, 0.55);
 }
@@ -127,13 +153,57 @@ input[data-hide-native-password-toggle="true"]::-ms-clear {
   color: #fca5a5;
 }
 
+.raid-map-marker-incident.is-priority-urgent {
+  border-color: rgba(246, 166, 35, 0.58);
+}
+
+.raid-map-marker-incident.is-priority-urgent::before {
+  background: rgba(246, 166, 35, 0.18);
+}
+
+.raid-map-marker-incident.is-priority-urgent .raid-map-marker-icon {
+  background: rgba(246, 166, 35, 0.18);
+  color: #fcd34d;
+}
+
+.raid-map-marker-incident.is-resolved {
+  border-color: rgba(148, 163, 184, 0.48);
+}
+
+.raid-map-marker-incident.is-resolved::before {
+  opacity: 0;
+}
+
+.raid-map-marker-incident.is-resolved .raid-map-marker-icon {
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
+
 .raid-map-marker-hospital {
-  border-color: rgba(59, 130, 246, 0.48);
+  border-color: rgba(34, 197, 94, 0.48);
 }
 
 .raid-map-marker-hospital .raid-map-marker-icon {
-  background: rgba(59, 130, 246, 0.18);
-  color: #93c5fd;
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+}
+
+.raid-map-marker-hospital.is-load-amber {
+  border-color: rgba(246, 166, 35, 0.58);
+}
+
+.raid-map-marker-hospital.is-load-amber .raid-map-marker-icon {
+  background: rgba(246, 166, 35, 0.18);
+  color: #fcd34d;
+}
+
+.raid-map-marker-hospital.is-load-red {
+  border-color: rgba(255, 71, 87, 0.62);
+}
+
+.raid-map-marker-hospital.is-load-red .raid-map-marker-icon {
+  background: rgba(255, 71, 87, 0.18);
+  color: #fda4af;
 }
 
 .raid-map-marker-user {

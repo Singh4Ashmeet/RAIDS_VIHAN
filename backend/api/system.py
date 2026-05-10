@@ -10,9 +10,10 @@ except ModuleNotFoundError:
 
 from repositories.ambulance_repo import AmbulanceRepository
 from repositories.hospital_repo import HospitalRepository
-from schemas.scenario import ScenarioRequest
+from schemas.scenario import ScenarioRequest, TrafficOverrideRequest
 from services.analytics_service import broadcast_score_update, build_analytics_snapshot
 from services.dispatch_service import full_dispatch_pipeline, save_dispatch_bg
+from simulation.engine import SimulationEngine
 from simulation.incident_sim import build_incident_payload, create_incident
 from core.response import error, success, unwrap_envelope
 
@@ -98,6 +99,120 @@ async def _prepare_cardiac_fixture() -> None:
         )
 
 
+def _ensure_engine(request: Request) -> SimulationEngine:
+    engine = getattr(request.app.state, "simulation_engine", None)
+    if engine is None:
+        engine = SimulationEngine()
+        request.app.state.simulation_engine = engine
+    return engine
+
+
+async def _hospital_for_city(city: str, preferred_id: str | None = None) -> dict[str, object]:
+    hospital_repo = HospitalRepository()
+    if preferred_id:
+        hospital = await hospital_repo.get_by_id(preferred_id)
+        if hospital is not None:
+            return hospital
+    hospitals = await hospital_repo.get_all(city) or await hospital_repo.get_all()
+    if not hospitals:
+        raise HTTPException(status_code=503, detail="No hospitals are available for scenario simulation.")
+    return sorted(
+        hospitals,
+        key=lambda item: float(item.get("occupancy_pct", 0.0)),
+        reverse=True,
+    )[0]
+
+
+async def _ambulance_for_city(city: str, preferred_id: str | None = None) -> dict[str, object]:
+    ambulance_repo = AmbulanceRepository()
+    if preferred_id:
+        ambulance = await ambulance_repo.get_by_id(preferred_id)
+        if ambulance is not None:
+            return ambulance
+    ambulances = await ambulance_repo.get_all(city) or await ambulance_repo.get_all()
+    if not ambulances:
+        raise HTTPException(status_code=503, detail="No ambulances are available for scenario simulation.")
+    available = [item for item in ambulances if item.get("status") == "available"]
+    return sorted(available or ambulances, key=lambda item: str(item.get("id")))[0]
+
+
+async def _create_and_dispatch(
+    incident: dict[str, object],
+    background_tasks: BackgroundTasks,
+) -> dict[str, object]:
+    await create_incident(incident)
+    dispatch_result = await full_dispatch_pipeline(str(incident["id"]), persist_dispatch=False)
+    if isinstance(dispatch_result, JSONResponse):
+        return {"incident": incident, "dispatch_plan": None, "dispatch_status": "error"}
+
+    dispatch_payload, dispatch_status, dispatch_message = unwrap_envelope(dispatch_result)
+    dispatch_plan = dispatch_payload if isinstance(dispatch_payload, dict) else dispatch_result
+    if isinstance(dispatch_plan, dict):
+        background_tasks.add_task(save_dispatch_bg, dispatch_plan)
+    return {
+        "incident": incident,
+        "dispatch_plan": dispatch_plan,
+        "dispatch_status": dispatch_status,
+        "dispatch_message": dispatch_message,
+    }
+
+
+async def _spawn_mass_casualty(city: str, background_tasks: BackgroundTasks) -> dict[str, object]:
+    offsets = [
+        (0.0000, 0.0000, "trauma"),
+        (0.0040, 0.0024, "accident"),
+        (-0.0036, 0.0032, "cardiac"),
+        (0.0028, -0.0042, "respiratory"),
+        (-0.0048, -0.0018, "trauma"),
+        (0.0052, -0.0030, "accident"),
+        (-0.0024, 0.0050, "cardiac"),
+        (0.0018, 0.0048, "other"),
+    ]
+    base_lat, base_lng = 28.6139, 77.2090
+    created: list[dict[str, object]] = []
+    dispatches: list[dict[str, object] | None] = []
+    for index, (lat_offset, lng_offset, incident_type) in enumerate(offsets, start=1):
+        incident = build_incident_payload(
+            city=city,
+            incident_type=incident_type,
+            severity="critical",
+            patient_count=2 if index <= 4 else 1,
+            location_lat=base_lat + lat_offset,
+            location_lng=base_lng + lng_offset,
+            description=f"mass casualty cluster incident {index}",
+        )
+        if index <= 3:
+            result = await _create_and_dispatch(incident, background_tasks)
+            created.append(result["incident"])
+            dispatches.append(result["dispatch_plan"])
+        else:
+            await create_incident(incident)
+            created.append(incident)
+    return {"incidents": created, "dispatches": dispatches, "manual_assignments_required": 5}
+
+
+async def _spawn_multi_zone(city: str, background_tasks: BackgroundTasks) -> dict[str, object]:
+    zones = [
+        ("North", 28.7041, 77.1025, "trauma"),
+        ("Central", 28.6304, 77.2177, "cardiac"),
+        ("South", 28.5274, 77.2160, "respiratory"),
+        ("East", 28.6735, 77.3059, "accident"),
+    ]
+    results: list[dict[str, object]] = []
+    for zone, lat, lng, incident_type in zones:
+        incident = build_incident_payload(
+            city=city,
+            incident_type=incident_type,
+            severity="high" if incident_type != "cardiac" else "critical",
+            patient_count=1,
+            location_lat=lat,
+            location_lng=lng,
+            description=f"{zone} zone {incident_type} scenario",
+        )
+        results.append(await _create_and_dispatch(incident, background_tasks))
+    return {"zones": [zone for zone, *_ in zones], "results": results}
+
+
 @router.post("/scenarios/run", response_model=None)
 @router.post("/simulate/scenario", response_model=None)
 @limiter.limit("12/minute")
@@ -109,7 +224,7 @@ async def trigger_scenario(
 ) -> dict[str, object] | JSONResponse:
     """Apply a live scenario mutation for demos and smoke checks."""
 
-    engine = getattr(request.app.state, "simulation_engine", None)
+    engine = _ensure_engine(request)
     body: dict[str, object] = {"scenario": payload.type}
 
     if payload.type == "cardiac":
@@ -143,17 +258,27 @@ async def trigger_scenario(
         if isinstance(dispatch_plan, dict):
             hospitals = await HospitalRepository().get_all(str(dispatch_plan.get("city") or incident["city"]))
             body["explanation"] = _cardiac_explanation(dispatch_plan, hospitals)
-    elif engine is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Background simulation is disabled for this deployment.",
+    elif payload.type in {"overload", "hospital_overload"}:
+        preferred_hospital_id = (
+            "HOSP-005"
+            if payload.type == "overload"
+            else "HOSP-001" if payload.city == "Delhi" else None
         )
-    elif payload.type == "overload":
-        body["overload"] = await engine.apply_hospital_overload("HOSP-005")
+        hospital = await _hospital_for_city(payload.city, preferred_hospital_id)
+        body["overload"] = await engine.apply_hospital_overload(str(hospital["id"]))
     elif payload.type == "breakdown":
-        body["breakdown"] = await engine.apply_ambulance_outage("AMB-007", 60)
-    elif payload.type == "traffic":
-        body["traffic"] = await engine.apply_traffic_override("Bengaluru", 2.5, 60)
+        ambulance = await _ambulance_for_city(payload.city, "AMB-007")
+        body["breakdown"] = await engine.apply_ambulance_outage(str(ambulance["id"]), payload.duration_seconds)
+    elif payload.type in {"traffic", "traffic_surge"}:
+        body["traffic"] = await engine.apply_traffic_override(
+            payload.city,
+            payload.traffic_multiplier,
+            payload.duration_seconds,
+        )
+    elif payload.type == "mass_casualty":
+        body["mass_casualty"] = await _spawn_mass_casualty(payload.city, background_tasks)
+    elif payload.type == "multi_zone":
+        body["multi_zone"] = await _spawn_multi_zone(payload.city, background_tasks)
     else:  # pragma: no cover - protected by Literal validation
         raise HTTPException(status_code=422, detail="Unsupported scenario type.")
 
@@ -161,6 +286,32 @@ async def trigger_scenario(
 
     await broadcast_event({"type": "scenario_triggered", **body})
     return success(body, message="Scenario triggered")
+
+
+@router.post("/simulate/traffic", response_model=None)
+@limiter.limit("20/minute")
+async def set_traffic_override(
+    request: Request,
+    payload: TrafficOverrideRequest = Body(...),
+) -> dict[str, object]:
+    """Set a simulation traffic multiplier without requiring a preset scenario."""
+
+    engine = _ensure_engine(request)
+    traffic = await engine.apply_traffic_override(
+        payload.city,
+        payload.multiplier,
+        payload.duration_seconds,
+    )
+    from api.websocket import broadcast_event
+
+    await broadcast_event(
+        {
+            "type": "traffic_update",
+            "traffic": traffic,
+            "timestamp": traffic["expires_at"],
+        }
+    )
+    return success({"traffic": traffic}, message="Traffic multiplier updated")
 
 
 @router.get("/analytics", response_model=None)

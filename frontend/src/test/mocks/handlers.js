@@ -329,6 +329,17 @@ export const handlers = [
     HttpResponse.json(MOCK_ANALYTICS)),
   http.get('/api/benchmark', () =>
     HttpResponse.json(MOCK_BENCHMARK)),
+  http.get('/api/demand/heatmap', () =>
+    HttpResponse.json({
+      city: 'Delhi',
+      lookahead_minutes: 30,
+      hotspots: [
+        { lat: 28.6139, lng: 77.209, demand_score: 0.92, predicted_incidents: 2 },
+        { lat: 28.6304, lng: 77.2177, demand_score: 0.72, predicted_incidents: 1 },
+      ],
+      preposition_recommendations: [],
+      generated_at: new Date().toISOString(),
+    })),
   http.get('/api/fairness', () =>
     HttpResponse.json(MOCK_FAIRNESS)),
   http.get('/api/literature-comparison', () =>
@@ -409,7 +420,60 @@ export const handlers = [
       })
     }
 
+    if (type === 'mass_casualty') {
+      return HttpResponse.json({
+        scenario: 'mass_casualty',
+        mass_casualty: {
+          incidents: MOCK_INCIDENTS,
+          dispatches: [MOCK_DISPATCH],
+          manual_assignments_required: 5,
+        },
+      })
+    }
+
+    if (type === 'hospital_overload') {
+      return HttpResponse.json({
+        scenario: 'hospital_overload',
+        overload: {
+          hospital_id: 'HOSP-001',
+          occupancy_pct: 95,
+          diversion_status: true,
+        },
+      })
+    }
+
+    if (type === 'traffic_surge') {
+      return HttpResponse.json({
+        scenario: 'traffic_surge',
+        traffic: {
+          city: 'Delhi',
+          multiplier: 2.5,
+          expires_at: new Date(Date.now() + 120000).toISOString(),
+        },
+      })
+    }
+
+    if (type === 'multi_zone') {
+      return HttpResponse.json({
+        scenario: 'multi_zone',
+        multi_zone: {
+          zones: ['North', 'Central', 'South', 'East'],
+          results: [{ incident: MOCK_INCIDENTS[0], dispatch_plan: MOCK_DISPATCH }],
+        },
+      })
+    }
+
     return HttpResponse.json({ scenario: type || 'unknown' }, { status: 200 })
+  }),
+  http.post('/api/simulate/traffic', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      traffic: {
+        city: body.city || 'Delhi',
+        multiplier: body.multiplier || 1,
+        expires_at: new Date(Date.now() + 300000).toISOString(),
+      },
+    })
   }),
   http.post('/api/dispatch', () =>
     HttpResponse.json(MOCK_DISPATCH)),

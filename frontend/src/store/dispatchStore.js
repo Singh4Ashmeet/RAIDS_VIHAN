@@ -207,13 +207,15 @@ const useDispatchStore = create((set, get) => ({
   pushNotification: (event) => {
     if (!event) return
     set((state) => ({
-      notifications: [event, ...state.notifications].slice(0, 20),
+      notifications: [event, ...state.notifications].slice(0, 50),
     }))
   },
 
   clearOverrideError: () => set({ overrideError: null }),
 
   setSimulationMode: (simulationMode) => set({ simulationMode }),
+
+  setTrafficMultiplier: (trafficMultiplier) => set({ trafficMultiplier }),
 
   setSelectedMapAmbulanceId: (selectedMapAmbulanceId) => set({ selectedMapAmbulanceId }),
 
@@ -520,7 +522,21 @@ const useDispatchStore = create((set, get) => ({
                   timestamp: msg.timestamp,
                 },
                 ...state.notifications,
-              ].slice(0, 20),
+              ].slice(0, 50),
+            }))
+          }
+          if (msg.type === 'traffic_update') {
+            const multiplier = Number(msg.traffic?.multiplier || msg.multiplier || get().trafficMultiplier)
+            set((state) => ({
+              trafficMultiplier: Number.isFinite(multiplier) ? multiplier : state.trafficMultiplier,
+              notifications: [
+                {
+                  type: 'traffic_update',
+                  message: `Traffic multiplier set to ${Number(multiplier || 1).toFixed(1)}x`,
+                  timestamp: msg.timestamp || new Date().toISOString(),
+                },
+                ...state.notifications,
+              ].slice(0, 50),
             }))
           }
           if (msg.type === 'incident_created' || msg.type === 'new_incident') {
@@ -570,7 +586,7 @@ const useDispatchStore = create((set, get) => ({
                   timestamp: msg.timestamp,
                 },
                 ...state.notifications,
-              ].slice(0, 20),
+              ].slice(0, 50),
               lastOverride: msg,
               systemStatus: 'normal',
             }))
@@ -587,7 +603,7 @@ const useDispatchStore = create((set, get) => ({
                     timestamp: anomalies[0].detected_at,
                   },
                   ...state.notifications,
-                ].slice(0, 20),
+                ].slice(0, 50),
               }))
             }
           }

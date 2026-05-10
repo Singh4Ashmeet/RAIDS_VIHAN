@@ -389,11 +389,27 @@ def find_available_port(host: str, preferred_port: int, max_attempts: int = 20) 
     )
 
 
-def start_backend(port: int, host: str, python_cmd: str) -> subprocess.Popen:
+def start_backend(
+    port: int,
+    host: str,
+    python_cmd: str,
+    *,
+    frontend_url: str | None = None,
+) -> subprocess.Popen:
     print(f"  {GREEN}[BACKEND]{RESET} Starting FastAPI on http://{host}:{port}...")
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-    env.setdefault("RAID_DISABLE_SIMULATION", "1")
+    if frontend_url:
+        configured_origins = env.get("CORS_ORIGINS", "")
+        origins = [
+            origin.strip()
+            for origin in configured_origins.split(",")
+            if origin.strip()
+        ]
+        if frontend_url not in origins:
+            origins.append(frontend_url)
+        env["CORS_ORIGINS"] = ",".join(origins)
+    env.setdefault("RAID_DISABLE_SIMULATION", "false")
     env.setdefault("RAID_DISABLE_EXTERNAL_ROUTING", "1")
     env.setdefault("RAID_DISABLE_ROUTE_GEOMETRY", "0")
     env.setdefault("RAID_LIGHTWEIGHT_TRIAGE", "1")
@@ -430,6 +446,8 @@ def start_frontend(
     print(f"  {CYAN}[FRONTEND]{RESET} Starting Vite on http://{host}:{port}...")
     env = os.environ.copy()
     env["VITE_API_BASE_URL"] = backend_url
+    env["VITE_WS_URL"] = f"{backend_url.replace('http', 'ws', 1)}/ws/live"
+    env["VITE_WS_BASE_URL"] = backend_url.replace("http", "ws", 1)
     proc = subprocess.Popen(
         [npm_cmd, "run", "dev", "--", "--host", host, "--port", str(port)],
         cwd=FRONTEND,
@@ -606,7 +624,12 @@ def main() -> None:
     parser.add_argument(
         "--enable-simulation",
         action="store_true",
-        help="Allow the background simulation loop during local startup",
+        help="Compatibility flag; simulation is enabled by default for Scenario Lab",
+    )
+    parser.add_argument(
+        "--disable-simulation",
+        action="store_true",
+        help="Disable the background simulation loop during local startup",
     )
     parser.add_argument(
         "--enable-heavy-ai",
@@ -637,7 +660,7 @@ def main() -> None:
     warn_if_synthetic_incidents_missing()
 
     os.environ.setdefault("USE_LLM", "false")
-    os.environ["RAID_DISABLE_SIMULATION"] = "false" if args.enable_simulation else "1"
+    os.environ["RAID_DISABLE_SIMULATION"] = "1" if args.disable_simulation else "false"
     os.environ["RAID_DISABLE_EXTERNAL_ROUTING"] = (
         "0" if args.enable_external_routing else "1"
     )
@@ -650,7 +673,14 @@ def main() -> None:
     npm_cmd = find_npm()
     backend_port = args.port_backend
     frontend_port = args.port_frontend
+    if not args.skip_frontend and is_port_open(args.host_frontend, frontend_port):
+        frontend_port = find_available_port(args.host_frontend, frontend_port + 1)
+        print(
+            f"  {YELLOW}[FRONTEND]{RESET} Port {args.port_frontend} is in use; "
+            f"planning Vite on {frontend_port}."
+        )
     backend_url = f"http://{args.host_backend}:{backend_port}"
+    frontend_url = f"http://{args.host_frontend}:{frontend_port}"
 
     processes: list[subprocess.Popen] = []
     print(f"{BOLD}Starting services...{RESET}\n")
@@ -671,11 +701,21 @@ def main() -> None:
                 f"  {YELLOW}[BACKEND]{RESET} Port {args.port_backend} is occupied but /health failed "
                 f"({status_text}); using {backend_port} instead."
             )
-            backend_proc = start_backend(backend_port, args.host_backend, python_cmd)
+            backend_proc = start_backend(
+                backend_port,
+                args.host_backend,
+                python_cmd,
+                frontend_url=frontend_url if not args.skip_frontend else None,
+            )
             backend_owned = True
             processes.append(backend_proc)
     else:
-        backend_proc = start_backend(backend_port, args.host_backend, python_cmd)
+        backend_proc = start_backend(
+            backend_port,
+            args.host_backend,
+            python_cmd,
+            frontend_url=frontend_url if not args.skip_frontend else None,
+        )
         backend_owned = True
         processes.append(backend_proc)
 
@@ -692,12 +732,6 @@ def main() -> None:
         )
 
     if not args.skip_frontend:
-        if is_port_open(args.host_frontend, frontend_port):
-            frontend_port = find_available_port(args.host_frontend, frontend_port + 1)
-            print(
-                f"  {YELLOW}[FRONTEND]{RESET} Port {args.port_frontend} is in use; "
-                f"starting Vite on {frontend_port}."
-            )
         frontend_url = f"http://{args.host_frontend}:{frontend_port}"
         frontend_proc = start_frontend(frontend_port, args.host_frontend, backend_url, npm_cmd)
         processes.append(frontend_proc)

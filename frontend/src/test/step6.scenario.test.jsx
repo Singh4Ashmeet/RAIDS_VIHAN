@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 
@@ -13,10 +13,14 @@ function resetDispatchStore() {
     ambulances: [],
     hospitals: [],
     lastDispatch: null,
+    activeRoute: null,
+    routeChange: null,
     dispatchHistory: [],
     notifications: [],
     wsStatus: 'connected',
     systemStatus: 'normal',
+    trafficMultiplier: 1,
+    simulationMode: true,
     _ws: null,
   })
 }
@@ -26,7 +30,7 @@ describe('ScenarioLab page', () => {
     resetDispatchStore()
   })
 
-  it('renders analytics strip with all 5 pills and highlights AI ETA improvement', async () => {
+  it('renders the split-panel simulator shell with analytics and live stats', async () => {
     server.use(
       http.get('/api/analytics', () =>
         HttpResponse.json({
@@ -40,115 +44,58 @@ describe('ScenarioLab page', () => {
 
     render(<ScenarioLab />)
 
-    expect(await screen.findByLabelText('Incidents: 12')).toBeInTheDocument()
-    expect(screen.getByLabelText('Dispatches: 10')).toBeInTheDocument()
-    expect(screen.getByLabelText('AI ETA: 5.2 min')).toBeInTheDocument()
-    expect(screen.getByLabelText('Baseline ETA: 8.9 min')).toBeInTheDocument()
-    expect(screen.getByLabelText('Overloads prevented: 2')).toBeInTheDocument()
-    expect(screen.getByText('5.2 min')).toHaveClass('text-emerald-400')
+    expect(await screen.findByText('Simulation Route Map')).toBeInTheDocument()
+    expect(screen.getByText('Delhi service area')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Units:/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Incidents:/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Traffic:/i)).toBeInTheDocument()
+    expect(await screen.findByText('Avg AI ETA 5.2 min')).toBeInTheDocument()
   })
 
-  it('renders all 4 scenario cards', async () => {
+  it('renders all four prompt scenario presets', async () => {
     render(<ScenarioLab />)
 
-    expect(await screen.findByText('Cardiac P1 Dispatch')).toBeInTheDocument()
+    expect(await screen.findByText('Mass Casualty Event')).toBeInTheDocument()
     expect(screen.getByText('Hospital Overload')).toBeInTheDocument()
-    expect(screen.getByText('Ambulance Breakdown')).toBeInTheDocument()
-    expect(screen.getByText('Traffic Spike')).toBeInTheDocument()
+    expect(screen.getByText('Traffic Surge')).toBeInTheDocument()
+    expect(screen.getByText('Multi-Zone')).toBeInTheDocument()
   })
 
-  it('runs the cardiac scenario and renders the step trace', async () => {
+  it('injects a custom incident and updates the dispatch card path', async () => {
     const user = userEvent.setup()
     render(<ScenarioLab />)
 
-    const cardiacCard = await screen.findByRole('region', {
-      name: /cardiac p1 dispatch scenario/i,
-    })
+    await user.click(await screen.findByRole('button', { name: /Inject Incident/i }))
 
-    await user.click(
-      within(cardiacCard).getByRole('button', {
-        name: /run cardiac p1 dispatch scenario/i,
-      })
-    )
-
-    expect(await screen.findByText('Incident created')).toBeInTheDocument()
+    expect(await screen.findByText(/New P1 cardiac incident injected in Delhi/i)).toBeInTheDocument()
+    expect(await screen.findByText(/AMB-001 -> HOSP-001/i)).toBeInTheDocument()
   })
 
-  it('runs overload, breakdown, and traffic scenarios and renders their traces', async () => {
+  it('runs mass casualty, overload, traffic surge, and multi-zone presets', async () => {
     const user = userEvent.setup()
     render(<ScenarioLab />)
 
-    const cases = [
-      {
-        region: /hospital overload scenario/i,
-        button: /run hospital overload scenario/i,
-        trace: 'Hospital targeted',
-      },
-      {
-        region: /ambulance breakdown scenario/i,
-        button: /run ambulance breakdown scenario/i,
-        trace: 'Ambulance taken offline',
-      },
-      {
-        region: /traffic spike scenario/i,
-        button: /run traffic spike scenario/i,
-        trace: 'City affected',
-      },
-    ]
-
-    for (const scenario of cases) {
-      const card = await screen.findByRole('region', { name: scenario.region })
-      await user.click(within(card).getByRole('button', { name: scenario.button }))
-      expect(await screen.findByText(scenario.trace)).toBeInTheDocument()
+    for (const label of ['Mass Casualty Event', 'Hospital Overload', 'Traffic Surge', 'Multi-Zone']) {
+      await user.click(await screen.findByRole('button', { name: new RegExp(label, 'i') }))
+      expect(await screen.findByText(new RegExp(`${label} scenario triggered`, 'i'))).toBeInTheDocument()
     }
   })
 
-  it('renders the fallback trace state when cardiac returns HTTP 207', async () => {
+  it('applies the traffic multiplier through the modal connection', async () => {
     const user = userEvent.setup()
-
-    server.use(
-      http.post('/api/simulate/scenario', async ({ request }) => {
-        const { type } = await request.json()
-
-        if (type === 'cardiac') {
-          return HttpResponse.json({
-            scenario: 'cardiac',
-            dispatch_status: 'fallback',
-            dispatch_message: 'Heuristic fallback route selected',
-            dispatch_plan: {
-              id: 'fallback-dispatch-id',
-              ambulance_id: 'AMB-009',
-              hospital_id: 'HOSP-001',
-              hospital_name: 'AIIMS Delhi',
-              eta_minutes: 9.3,
-              final_score: 0.71,
-              status: 'fallback',
-            },
-          }, { status: 207 })
-        }
-
-        return HttpResponse.json({ scenario: type || 'unknown' })
-      })
-    )
-
     render(<ScenarioLab />)
 
-    const cardiacCard = await screen.findByRole('region', {
-      name: /cardiac p1 dispatch scenario/i,
-    })
+    await user.click(await screen.findByLabelText('Traffic: 1.0x'))
+    const dialog = await screen.findByRole('dialog')
+    const slider = within(dialog).getByRole('slider')
+    fireEvent.change(slider, { target: { value: '2.4' } })
+    await user.click(within(dialog).getByRole('button', { name: /Apply Traffic/i }))
 
-    await user.click(
-      within(cardiacCard).getByRole('button', {
-        name: /run cardiac p1 dispatch scenario/i,
-      })
-    )
-
-    expect(await screen.findByText('Heuristic fallback route selected')).toBeInTheDocument()
+    expect(await screen.findByText(/Traffic multiplier set to 2.4x for Delhi/i)).toBeInTheDocument()
   })
 
-  it('shows the scenario failed card message when the API errors', async () => {
+  it('shows preset API failures in the alert feed without crashing the page', async () => {
     const user = userEvent.setup()
-
     server.use(
       http.post('/api/simulate/scenario', () =>
         HttpResponse.json({ detail: 'Scenario failed' }, { status: 500 }))
@@ -156,85 +103,38 @@ describe('ScenarioLab page', () => {
 
     render(<ScenarioLab />)
 
-    const cardiacCard = await screen.findByRole('region', {
-      name: /cardiac p1 dispatch scenario/i,
-    })
+    await user.click(await screen.findByRole('button', { name: /Mass Casualty Event/i }))
 
-    await user.click(
-      within(cardiacCard).getByRole('button', {
-        name: /run cardiac p1 dispatch scenario/i,
-      })
-    )
-
-    expect(await within(cardiacCard).findByText('Scenario failed')).toBeInTheDocument()
+    expect(await screen.findByText('Scenario failed')).toBeInTheDocument()
+    expect(screen.getByText('Alert Feed')).toBeInTheDocument()
   })
 
-  it('disables the other three cards while one scenario is running', async () => {
+  it('disables the other presets while one preset is running', async () => {
     const user = userEvent.setup()
-    let releaseCardiacRequest
+    let releaseMassCasualtyRequest
 
     server.use(
       http.post('/api/simulate/scenario', async ({ request }) => {
         const { type } = await request.json()
-
-        if (type === 'cardiac') {
+        if (type === 'mass_casualty') {
           await new Promise((resolve) => {
-            releaseCardiacRequest = resolve
-          })
-
-          return HttpResponse.json({
-            scenario: 'cardiac',
-            dispatch_plan: {
-              id: 'slow-cardiac-id',
-              ambulance_id: 'AMB-003',
-              hospital_id: 'HOSP-001',
-              hospital_name: 'AIIMS Delhi',
-              eta_minutes: 7.4,
-              final_score: 0.91,
-              status: 'success',
-            },
+            releaseMassCasualtyRequest = resolve
           })
         }
-
         return HttpResponse.json({ scenario: type || 'unknown' })
       })
     )
 
     render(<ScenarioLab />)
 
-    const cardiacCard = await screen.findByRole('region', {
-      name: /cardiac p1 dispatch scenario/i,
-    })
-    const overloadCard = screen.getByRole('region', { name: /hospital overload scenario/i })
-    const breakdownCard = screen.getByRole('region', { name: /ambulance breakdown scenario/i })
-    const trafficCard = screen.getByRole('region', { name: /traffic spike scenario/i })
-
-    await user.click(
-      within(cardiacCard).getByRole('button', {
-        name: /run cardiac p1 dispatch scenario/i,
-      })
-    )
+    await user.click(await screen.findByRole('button', { name: /Mass Casualty Event/i }))
 
     await waitFor(() => {
-      expect(
-        within(overloadCard).getByRole('button', {
-          name: /run hospital overload scenario/i,
-        })
-      ).toBeDisabled()
-      expect(
-        within(breakdownCard).getByRole('button', {
-          name: /run ambulance breakdown scenario/i,
-        })
-      ).toBeDisabled()
-      expect(
-        within(trafficCard).getByRole('button', {
-          name: /run traffic spike scenario/i,
-        })
-      ).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Hospital Overload/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Traffic Surge/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Multi-Zone/i })).toBeDisabled()
     })
 
-    releaseCardiacRequest?.()
-
-    expect(await screen.findByText('Incident created')).toBeInTheDocument()
+    releaseMassCasualtyRequest?.()
   })
 })
