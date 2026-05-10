@@ -44,8 +44,10 @@ describe('ScenarioLab page', () => {
 
     render(<ScenarioLab />)
 
-    expect(await screen.findByText('Simulation Route Map')).toBeInTheDocument()
+    expect(await screen.findByText('Run drills and watch how dispatch decisions change.')).toBeInTheDocument()
     expect(screen.getByText('Delhi service area')).toBeInTheDocument()
+    expect(screen.getByText('Run Order')).toBeInTheDocument()
+    expect(screen.getByText('1. Pick city')).toBeInTheDocument()
     expect(screen.getByLabelText(/Units:/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Incidents:/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Traffic:/i)).toBeInTheDocument()
@@ -64,7 +66,7 @@ describe('ScenarioLab page', () => {
   it('renders a readable active dispatch and hides raw UUIDs from the operator list', async () => {
     render(<ScenarioLab />)
 
-    expect(await screen.findByText(/AMB-003 -> HOSP-001/i)).toBeInTheDocument()
+    expect(await screen.findByText('No dispatch selected')).toBeInTheDocument()
     expect(screen.getByText(/Active Incidents/i)).toBeInTheDocument()
     expect(screen.queryByText(/[0-9a-f]{8}-[0-9a-f]{4}/i)).not.toBeInTheDocument()
   })
@@ -77,6 +79,8 @@ describe('ScenarioLab page', () => {
       await user.click(await screen.findByRole('button', { name: new RegExp(label, 'i') }))
       expect(await screen.findByText(new RegExp(`${label} scenario triggered`, 'i'))).toBeInTheDocument()
     }
+
+    expect(await screen.findByText(/AMB-001 -> HOSP-001/i)).toBeInTheDocument()
   })
 
   it('applies the traffic multiplier through the modal connection', async () => {

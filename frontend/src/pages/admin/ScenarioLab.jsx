@@ -66,28 +66,28 @@ const PRESETS = [
     label: 'Mass Casualty Event',
     Icon: Users,
     tone: 'red',
-    description: 'Clustered P1 incidents with manual assignments.',
+    description: 'Creates several critical calls at once.',
   },
   {
     type: 'hospital_overload',
     label: 'Hospital Overload',
     Icon: Hospital,
     tone: 'amber',
-    description: 'Forces diversion and capacity-aware rerouting.',
+    description: 'Tests diversion when one hospital is too full.',
   },
   {
     type: 'traffic_surge',
     label: 'Traffic Surge',
     Icon: Zap,
     tone: 'blue',
-    description: 'Applies the selected traffic multiplier.',
+    description: 'Raises road delay and recalculates ETA.',
   },
   {
     type: 'multi_zone',
     label: 'Multi-Zone',
     Icon: Crosshair,
     tone: 'teal',
-    description: 'Incidents across four Delhi service zones.',
+    description: 'Spreads incidents across service zones.',
   },
 ]
 
@@ -109,6 +109,12 @@ const MOBILE_NAV = [
   { label: 'Incidents', Icon: AlertTriangle, active: false },
   { label: 'Scenarios', Icon: FlaskConical, active: true },
   { label: 'More', Icon: MoreHorizontal, active: false },
+]
+
+const WORKFLOW_STEPS = [
+  { label: 'Pick city', detail: 'Service area', Icon: MapPin },
+  { label: 'Run drill', detail: 'Create pressure', Icon: FlaskConical },
+  { label: 'Review route', detail: 'Dispatch + hospital', Icon: Route },
 ]
 
 const CITY_DEFAULT_COORDS = {
@@ -241,15 +247,54 @@ function humanizeUiText(value) {
     .trim()
 }
 
-function PanelSection({ title, action, children, className }) {
+function extractDispatchPlan(result) {
+  if (result?.dispatch_plan) return result.dispatch_plan
+  if (result?.mass_casualty?.dispatches?.[0]) return result.mass_casualty.dispatches[0]
+  const multiZoneResult = result?.multi_zone?.results?.find((item) => item?.dispatch_plan)
+  if (multiZoneResult?.dispatch_plan) return multiZoneResult.dispatch_plan
+  const nestedResult = result?.results?.find((item) => item?.dispatch_plan)
+  return nestedResult?.dispatch_plan || null
+}
+
+function PanelSection({ title, description, action, children, className }) {
   return (
     <section className={clsx('border-t border-white/10 pt-4', className)}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</h2>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</h2>
+          {description ? <p className="mt-1 text-[11px] leading-4 text-[#8892a4]">{description}</p> : null}
+        </div>
         {action}
       </div>
       {children}
     </section>
+  )
+}
+
+function WorkflowGuide({ simulationMode, paused }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#131929] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8892a4]">Run Order</p>
+        <span className={clsx(
+          'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+          simulationMode && !paused ? 'bg-[#00d4aa]/15 text-[#00d4aa]' : 'bg-[#ffa502]/15 text-[#ffb733]'
+        )}>
+          {simulationMode && !paused ? 'Ready' : 'Controls off'}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {WORKFLOW_STEPS.map(({ label, detail, Icon }, index) => (
+          <div key={label} className="rounded-lg border border-white/[0.06] bg-[#0d1117] px-2 py-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#00d4aa]/10 text-[#00d4aa]">
+              <Icon size={14} />
+            </span>
+            <p className="mt-2 text-[11px] font-semibold text-[#f0f4ff]">{index + 1}. {label}</p>
+            <p className="mt-0.5 text-[10px] text-[#4a5568]">{detail}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -283,24 +328,26 @@ function ModeToggle({ simulationMode, setSimulationMode }) {
       <button
         type="button"
         onClick={() => setSimulationMode(false)}
+        aria-pressed={!simulationMode}
         className={clsx(
           'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition',
           !simulationMode ? 'bg-[#00d4aa] text-[#06110f]' : 'text-slate-400 hover:text-white'
         )}
       >
         <RadioTower size={14} />
-        Real
+        Watch Live
       </button>
       <button
         type="button"
         onClick={() => setSimulationMode(true)}
+        aria-pressed={simulationMode}
         className={clsx(
           'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition',
           simulationMode ? 'bg-[#00d4aa] text-[#06110f]' : 'text-slate-400 hover:text-white'
         )}
       >
         <FlaskConical size={14} />
-        Simulation
+        Run Drills
       </button>
     </div>
   )
@@ -308,12 +355,13 @@ function ModeToggle({ simulationMode, setSimulationMode }) {
 
 function DispatchCard({ activeRoute, dispatch, routeChange, onManualReroute }) {
   const [secondsLeft, setSecondsLeft] = useState(null)
+  const hasDispatch = Boolean(activeRoute || dispatch?.id || dispatch?.ambulance_id || dispatch?.hospital_id)
   const etaMinutes = safeEtaMinutes(activeRoute?.eta_minutes ?? dispatch?.eta_minutes)
   const unit = activeRoute?.ambulance_id || dispatch?.ambulance_id || 'AMB-003'
   const hospital = activeRoute?.hospital_id || dispatch?.hospital_id || 'HOSP-001'
   const routeId = activeRoute?.dispatch_id || dispatch?.id || 'pending'
   const distance = routeDistanceKm(activeRoute)
-  const warning = routeChange?.label || routeChange?.message || 'Rerouting due to hospital load'
+  const warning = routeChange?.label || routeChange?.message || ''
 
   useEffect(() => {
     if (!etaMinutes) {
@@ -326,6 +374,24 @@ function DispatchCard({ activeRoute, dispatch, routeChange, onManualReroute }) {
     }, 1000)
     return () => window.clearInterval(timer)
   }, [etaMinutes, routeId])
+
+  if (!hasDispatch) {
+    return (
+      <div className="rounded-[10px] border border-dashed border-white/10 bg-[#131929] p-4">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#00d4aa]/25 bg-[#00d4aa]/10 text-[#00d4aa]">
+            <Route size={18} />
+          </span>
+          <div>
+            <p className="text-[13px] font-semibold text-[#f0f4ff]">No dispatch selected</p>
+            <p className="mt-1 text-xs leading-5 text-[#8892a4]">
+              Run a drill to generate an ambulance route, then use this card to compare ETA, hospital load, and reroute choices.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-[10px] border border-white/10 bg-[#131929] p-3.5 shadow-xl shadow-black/20">
@@ -346,23 +412,31 @@ function DispatchCard({ activeRoute, dispatch, routeChange, onManualReroute }) {
       </div>
 
       <AnimatePresence initial={false}>
-        {warning ? (
+        {warning || hasDispatch ? (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mt-3 flex items-center justify-between gap-2 rounded-md bg-[#ffa502]/15 px-2.5 py-2 text-[11px] text-[#ffb733]"
+            className={clsx(
+              'mt-3 flex items-center justify-between gap-2 rounded-md px-2.5 py-2 text-[11px]',
+              warning ? 'bg-[#ffa502]/15 text-[#ffb733]' : 'border border-white/[0.06] bg-[#0d1117] text-[#8892a4]'
+            )}
           >
             <span className="inline-flex min-w-0 items-center gap-1.5">
-              <AlertTriangle size={13} className="shrink-0 animate-pulse" />
-              <span className="truncate">{warning}</span>
+              {warning ? <AlertTriangle size={13} className="shrink-0 animate-pulse" /> : <Route size={13} className="shrink-0" />}
+              <span className="truncate">{warning || 'Route ready for review'}</span>
             </span>
             <button
               type="button"
               onClick={onManualReroute}
-              className="min-h-0 min-w-0 shrink-0 rounded-md border border-[#ffa502]/70 px-2 py-1 text-[10px] font-semibold text-[#ffb733] transition hover:bg-[#ffa502]/10"
+              className={clsx(
+                'min-h-0 min-w-0 shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold transition',
+                warning
+                  ? 'border-[#ffa502]/70 text-[#ffb733] hover:bg-[#ffa502]/10'
+                  : 'border-[#00d4aa]/50 text-[#00d4aa] hover:bg-[#00d4aa]/10'
+              )}
             >
-              Reroute
+              Compare
             </button>
           </motion.div>
         ) : null}
@@ -707,7 +781,7 @@ function ManualRerouteModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Manual Reroute"
+      title="Compare Hospitals"
       footer={(
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -716,7 +790,7 @@ function ManualRerouteModal({
       )}
     >
       <div>
-        <p className="-mt-2 mb-4 text-xs text-[#8892a4]">Select destination hospital</p>
+        <p className="-mt-2 mb-4 text-xs text-[#8892a4]">Pick the receiving hospital with the best balance of load, distance, and ETA.</p>
         <div className="overflow-hidden rounded-lg border border-white/10 bg-[#0a0e1a]/60">
           <div className="grid grid-cols-[40px_minmax(0,1fr)_58px_70px_58px] border-b border-white/[0.06] px-3 py-2 text-[10px] uppercase tracking-[0.08em] text-[#4a5568]">
             <span>Rank</span>
@@ -882,7 +956,8 @@ export default function ScenarioLab() {
         traffic_multiplier: preset.type === 'traffic_surge' ? localTraffic : 2.5,
         duration_seconds: preset.type === 'traffic_surge' ? 120 : 90,
       })
-      if (result?.dispatch_plan) setLastDispatch(result.dispatch_plan)
+      const dispatchPlan = extractDispatchPlan(result)
+      if (dispatchPlan) setLastDispatch(dispatchPlan)
       pushLocalAlert('warning', `${preset.label} scenario triggered.`)
       await fetchAll()
     } catch (error) {
@@ -908,13 +983,14 @@ export default function ScenarioLab() {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="text-[15px] font-semibold text-[#f0f4ff]">Simulation Route Map</h1>
+            <h1 className="text-[15px] font-semibold text-[#f0f4ff]">Scenario Lab</h1>
             <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium', live ? 'text-[#00d4aa]' : 'text-[#ffa502]')}>
               <span className={clsx('h-1.5 w-1.5 rounded-full', live ? 'bg-[#00d4aa]' : 'bg-[#ffa502]')} />
               {live ? 'Live' : 'Syncing'}
             </span>
           </div>
           <p className="mt-1 text-[11px] text-[#8892a4]">{city} service area</p>
+          <p className="mt-1 text-[11px] leading-4 text-[#4a5568]">Run drills and watch how dispatch decisions change.</p>
         </div>
         <button
           type="button"
@@ -957,13 +1033,21 @@ export default function ScenarioLab() {
         <ModeToggle simulationMode={simulationMode} setSimulationMode={setSimulationMode} />
       </div>
 
+      <div className="mt-3">
+        <WorkflowGuide simulationMode={simulationMode} paused={paused} />
+      </div>
+
       {paused ? (
         <div className="mt-3 rounded-lg border border-[#ffa502]/30 bg-[#ffa502]/10 px-3 py-2 text-xs text-[#ffb733]">
           Scenario controls are paused locally. Live map updates continue.
         </div>
       ) : null}
 
-      <PanelSection title="Inject Incident" className="mt-4">
+      <PanelSection
+        title="Run a Drill"
+        description="Preset drills create incidents, traffic, or hospital pressure so you can see the dispatch response."
+        className="mt-4"
+      >
         <div className="grid grid-cols-2 gap-2">
           {PRESETS.map((preset) => (
             <PresetButton
@@ -979,6 +1063,7 @@ export default function ScenarioLab() {
 
       <PanelSection
         title="Active Dispatch"
+        description="The current ambulance-to-hospital route from the latest drill."
         action={analytics ? <span className="text-[11px] text-[#4a5568]">Avg AI ETA {Number(analytics.avg_eta_ai || 0).toFixed(1)} min</span> : null}
         className="mt-4"
       >
@@ -992,7 +1077,7 @@ export default function ScenarioLab() {
 
       <PanelSection
         title={`Active Incidents (${incidentCount})`}
-        action={<button type="button" className="min-h-0 min-w-0 text-[11px] font-medium text-[#5ba8ff]">View all</button>}
+        description="Select a call to center the map and inspect the route context."
         className="mt-4"
       >
         <ActiveIncidentList
@@ -1006,7 +1091,7 @@ export default function ScenarioLab() {
 
       <PanelSection
         title="Alert Feed"
-        action={<button type="button" className="min-h-0 min-w-0 text-[11px] font-medium text-[#5ba8ff]">View all</button>}
+        description="Newest scenario, traffic, dispatch, and API events."
         className="mt-4"
       >
         <AlertFeed notifications={notifications} localAlerts={localAlerts} />
@@ -1110,9 +1195,14 @@ export default function ScenarioLab() {
                 <MapPin size={16} />
               </span>
               <div>
-                <p className="text-sm font-semibold text-white">Delhi AI Dispatch Grid</p>
+                <p className="text-sm font-semibold text-white">{city} Dispatch View</p>
                 <p className="text-xs text-[#8892a4]">Hospital load {avgLoad}% - traffic {Number(trafficMultiplier || 1).toFixed(1)}x</p>
               </div>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-[#8892a4]">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#ff4757]" />Incident</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#00d4aa]" />Ambulance</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#5ba8ff]" />Hospital</span>
             </div>
           </div>
         </main>
