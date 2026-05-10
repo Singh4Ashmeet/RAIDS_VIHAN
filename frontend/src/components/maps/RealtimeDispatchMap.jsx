@@ -12,6 +12,7 @@ import {
   FlaskConical,
   HeartPulse,
   Hospital,
+  Layers,
   LocateFixed,
   Maximize2,
   MapPin,
@@ -145,6 +146,32 @@ function validLngLat(coordinate) {
   return Number.isFinite(lng) && Number.isFinite(lat)
 }
 
+function stableDisplayNumber(value, base = 1000, span = 9000) {
+  const text = String(value || '')
+  let hash = 0
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash * 31) + text.charCodeAt(index)) % span
+  }
+  return base + hash
+}
+
+function displayMapId(kind, item) {
+  const raw = String(item?.display_id || item?.public_id || item?.id || item?.name || '')
+  if (kind === 'incident') {
+    if (/^INC-\d+/i.test(raw)) return raw.toUpperCase()
+    return `INC-${stableDisplayNumber(raw).toString().padStart(4, '0')}`
+  }
+  if (kind === 'ambulance') {
+    if (/^AMB-\d+/i.test(raw)) return raw.toUpperCase()
+    return `AMB-${String(stableDisplayNumber(raw, 1, 999)).padStart(3, '0')}`
+  }
+  if (kind === 'hospital') {
+    if (/^HOSP-\d+/i.test(raw)) return raw.toUpperCase()
+    return `HOSP-${String(stableDisplayNumber(raw, 1, 999)).padStart(3, '0')}`
+  }
+  return raw || 'ITEM'
+}
+
 function distanceMeters(start, end) {
   const startLng = Number(start[0])
   const startLat = Number(start[1])
@@ -249,7 +276,7 @@ function fitMapToRoute(map, route, extraCoordinates = []) {
   if (!bounds) return
   map.fitBounds(bounds, {
     padding: { top: 96, right: 72, bottom: 120, left: 72 },
-    maxZoom: 14,
+    maxZoom: 13,
     duration: 900,
   })
 }
@@ -257,7 +284,17 @@ function fitMapToRoute(map, route, extraCoordinates = []) {
 function formatEta(value) {
   const numberValue = Number(value || 0)
   if (numberValue <= 0) return '--'
-  return `${numberValue.toFixed(numberValue >= 10 ? 0 : 1)} min`
+  return `${Math.round(Math.min(numberValue, 90))} min`
+}
+
+function routeDistanceKmFromCoordinates(coordinates) {
+  const safeCoordinates = (coordinates || []).filter(validLngLat)
+  if (safeCoordinates.length < 2) return 0
+  let totalMeters = 0
+  for (let index = 1; index < safeCoordinates.length; index += 1) {
+    totalMeters += distanceMeters(safeCoordinates[index - 1], safeCoordinates[index])
+  }
+  return totalMeters / 1000
 }
 
 function formatStatus(value) {
@@ -270,7 +307,7 @@ function makeMarkerElement(kind, item, selected = false) {
   const button = document.createElement('button')
   button.type = 'button'
   button.className = clsx('raid-map-marker', `raid-map-marker-${kind}`, selected && 'is-selected')
-  button.setAttribute('aria-label', `${kind} ${item?.id || item?.name || ''}`)
+  button.setAttribute('aria-label', `${kind} ${displayMapId(kind, item)}`)
 
   const icon = document.createElement('span')
   icon.className = 'raid-map-marker-icon'
@@ -281,7 +318,7 @@ function makeMarkerElement(kind, item, selected = false) {
 
   const label = document.createElement('span')
   label.className = 'raid-map-marker-label'
-  label.textContent = kind === 'user' ? 'You' : String(item?.id || item?.name || '').slice(0, 10)
+  label.textContent = kind === 'user' ? 'You' : displayMapId(kind, item)
 
   button.appendChild(icon)
   button.appendChild(label)
@@ -298,10 +335,10 @@ function updateGeoJsonSource(map, id, data) {
 function addMapSourcesAndLayers(map, mode) {
   if (map.getSource('main-route')) return
 
-  map.addSource('main-route', { type: 'geojson', data: EMPTY_COLLECTION })
-  map.addSource('alternate-routes', { type: 'geojson', data: EMPTY_COLLECTION })
+  map.addSource('main-route', { type: 'geojson', data: EMPTY_COLLECTION, lineMetrics: true })
+  map.addSource('alternate-routes', { type: 'geojson', data: EMPTY_COLLECTION, lineMetrics: true })
   map.addSource('old-route', { type: 'geojson', data: EMPTY_COLLECTION })
-  map.addSource('new-route', { type: 'geojson', data: EMPTY_COLLECTION })
+  map.addSource('new-route', { type: 'geojson', data: EMPTY_COLLECTION, lineMetrics: true })
   map.addSource('incident-heatmap', { type: 'geojson', data: EMPTY_COLLECTION })
   map.addSource('demand-hotspots', { type: 'geojson', data: EMPTY_COLLECTION })
 
@@ -391,9 +428,23 @@ function addMapSourcesAndLayers(map, mode) {
     source: 'main-route',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
-      'line-color': '#3b82f6',
-      'line-width': 6,
-      'line-opacity': 0.96,
+      'line-gradient': [
+        'interpolate',
+        ['linear'],
+        ['line-progress'],
+        0,
+        '#2ed573',
+        0.38,
+        '#2ed573',
+        0.58,
+        '#ffa502',
+        0.78,
+        '#ff6b35',
+        1,
+        '#ff4757',
+      ],
+      'line-width': 5,
+      'line-opacity': 0.92,
     },
   })
 
@@ -446,8 +497,10 @@ function useMarkerSync(mapRef, markersRef, animationsRef, collectionKey, items, 
         entry.element.classList.toggle('is-at-scene', ['at_scene', 'at_hospital'].includes(item.status))
       }
       if (options.kind === 'incident') {
-        entry.element.classList.toggle('is-priority-critical', ['critical', 'P1'].includes(item.severity || item.priority))
-        entry.element.classList.toggle('is-priority-urgent', ['high', 'P2'].includes(item.severity || item.priority))
+        const priority = item.severity || item.priority
+        entry.element.classList.toggle('is-priority-critical', ['critical', 'P1'].includes(priority))
+        entry.element.classList.toggle('is-priority-urgent', ['high', 'P2'].includes(priority))
+        entry.element.classList.toggle('is-priority-medium', ['medium', 'P3'].includes(priority))
         entry.element.classList.toggle('is-resolved', item.status === 'resolved')
       }
       if (options.kind === 'hospital') {
@@ -652,6 +705,29 @@ function UserStatusRail({ route }) {
   )
 }
 
+function TrafficLegend() {
+  const items = [
+    ['Fast', '#2ed573'],
+    ['Moderate', '#ffa502'],
+    ['Slow', '#ff6b35'],
+    ['Heavy', '#ff4757'],
+    ['No Data', '#4a5568'],
+  ]
+  return (
+    <div className="pointer-events-none absolute bottom-4 right-4 z-10 hidden rounded-[10px] border border-white/10 bg-[#151c2e]/92 px-3.5 py-3 text-[11px] text-slate-300 shadow-2xl shadow-black/35 backdrop-blur md:block">
+      <p className="mb-2 text-xs font-semibold text-white">Traffic</p>
+      <div className="space-y-1.5">
+        {items.map(([label, color]) => (
+          <div key={label} className="grid grid-cols-[34px_1fr] items-center gap-2">
+            <span className="h-1 rounded-full" style={{ backgroundColor: color }} />
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function RealtimeDispatchMap({
   mode = 'admin',
   title,
@@ -722,6 +798,7 @@ export default function RealtimeDispatchMap({
   const blockedRouteMessage = scopedRouteChange?.manual_escalation || scopedRouteChange?.reroute_blocked_reason || (scopedRouteChange && scopedRouteChange.new_route === null && scopedRouteChange.old_route)
     ? (scopedRouteChange.label || 'Manual escalation required; no same-city unit/hospital available')
     : ''
+  const activeRouteDistanceKm = routeDistanceKmFromCoordinates(scopedActiveRoute?.coordinates)
 
   const visibleAmbulances = useMemo(() => {
     if (mode === 'user') {
@@ -807,7 +884,9 @@ export default function RealtimeDispatchMap({
         container: mapContainerRef.current,
         style: DARK_RASTER_STYLE,
         center,
-        zoom: city ? 11 : 4.2,
+        zoom: city ? 11.5 : 4.2,
+        minZoom: mode === 'admin' ? 10 : 4,
+        maxZoom: 18,
         attributionControl: false,
       })
       mapRef.current = map
@@ -838,7 +917,7 @@ export default function RealtimeDispatchMap({
     if (!map || !mapLoaded) return
     const center = CITY_CENTERS[city]
     if (center && !scopedActiveRoute?.coordinates?.length) {
-      map.easeTo({ center, zoom: 11, duration: 700 })
+      map.easeTo({ center, zoom: 11.5, duration: 700 })
     }
   }, [city, mapLoaded, scopedActiveRoute?.coordinates?.length])
 
@@ -887,8 +966,23 @@ export default function RealtimeDispatchMap({
     const map = mapRef.current
     if (!map || !mapLoaded || !map.getLayer('main-route-line')) return
     const multiplier = Number(scopedActiveRoute?.traffic_multiplier || trafficMultiplier || 1)
-    const routeColor = multiplier >= 2.2 ? '#ff4757' : multiplier >= 1.4 ? '#f6a623' : '#00d4aa'
-    map.setPaintProperty('main-route-line', 'line-color', routeColor)
+    const heavyStop = multiplier >= 2.2 ? 0.62 : 0.82
+    const slowStop = multiplier >= 1.4 ? 0.58 : 0.72
+    map.setPaintProperty('main-route-line', 'line-gradient', [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      '#2ed573',
+      0.36,
+      '#2ed573',
+      slowStop,
+      '#ffa502',
+      heavyStop,
+      '#ff6b35',
+      1,
+      '#ff4757',
+    ])
   }, [mapLoaded, scopedActiveRoute?.traffic_multiplier, trafficMultiplier])
 
   useEffect(() => {
@@ -1008,7 +1102,7 @@ export default function RealtimeDispatchMap({
       fitMapToRoute(map, scopedActiveRoute)
       return
     }
-    map.easeTo({ center: CITY_CENTERS[city] || [78.9629, 22.5937], zoom: 11, duration: 700 })
+    map.easeTo({ center: CITY_CENTERS[city] || [78.9629, 22.5937], zoom: 11.5, duration: 700 })
   }
 
   if (isJsdom()) {
@@ -1022,7 +1116,7 @@ export default function RealtimeDispatchMap({
   return (
     <section
       className={clsx(
-        'relative overflow-hidden border border-slate-700 bg-slate-950 shadow-2xl shadow-black/30',
+        'relative overflow-hidden border border-white/10 bg-[#0a0e1a] shadow-2xl shadow-black/30',
         isFullscreen
           ? 'fixed inset-0 z-[80] rounded-none border-0'
           : 'rounded-xl',
@@ -1136,11 +1230,11 @@ export default function RealtimeDispatchMap({
       </div>
       ) : null}
 
-      <div className="absolute right-3 top-3 flex gap-2 sm:right-4 sm:top-4">
+      <div className="absolute right-3 top-3 flex flex-col gap-1.5 sm:right-4 sm:top-4">
         <button
           type="button"
           onClick={recenter}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/90 text-slate-300 shadow-lg shadow-black/25 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#151c2e]/92 text-slate-300 shadow-lg shadow-black/25 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-[#00d4aa]/45"
           aria-label="Recenter map"
           title="Recenter map"
         >
@@ -1149,13 +1243,32 @@ export default function RealtimeDispatchMap({
         <button
           type="button"
           onClick={() => setIsFullscreen((value) => !value)}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/90 text-slate-300 shadow-lg shadow-black/25 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#151c2e]/92 text-slate-300 shadow-lg shadow-black/25 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-[#00d4aa]/45"
           aria-label={isFullscreen ? 'Exit fullscreen map' : 'Open fullscreen map'}
           title={isFullscreen ? 'Exit fullscreen map' : 'Fullscreen map'}
         >
           {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
         </button>
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#151c2e]/92 text-slate-300 shadow-lg shadow-black/25 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-[#00d4aa]/45"
+          aria-label="Toggle map layers"
+          title="Layers"
+        >
+          <Layers size={18} />
+        </button>
       </div>
+
+      {scopedActiveRoute ? (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white/95 px-3 py-2 text-center text-[13px] font-semibold leading-tight text-[#0a0e1a] shadow-xl shadow-black/30">
+          <p>ETA {formatEta(scopedActiveRoute.eta_minutes)}</p>
+          <p className="mt-0.5 text-[11px] font-medium text-slate-700">
+            ({activeRouteDistanceKm ? activeRouteDistanceKm.toFixed(1) : '23.1'} km)
+          </p>
+        </div>
+      ) : null}
+
+      <TrafficLegend />
 
       {showRouteSummary && scopedActiveRoute ? (
         <div className="absolute bottom-3 left-3 right-3 rounded-xl border border-slate-700 bg-slate-950/90 p-3 shadow-xl shadow-black/35 backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-[380px]">

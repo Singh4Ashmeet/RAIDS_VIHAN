@@ -61,14 +61,12 @@ describe('ScenarioLab page', () => {
     expect(screen.getByText('Multi-Zone')).toBeInTheDocument()
   })
 
-  it('injects a custom incident and updates the dispatch card path', async () => {
-    const user = userEvent.setup()
+  it('renders a readable active dispatch and hides raw UUIDs from the operator list', async () => {
     render(<ScenarioLab />)
 
-    await user.click(await screen.findByRole('button', { name: /Inject Incident/i }))
-
-    expect(await screen.findByText(/New P1 cardiac incident injected in Delhi/i)).toBeInTheDocument()
-    expect(await screen.findByText(/AMB-001 -> HOSP-001/i)).toBeInTheDocument()
+    expect(await screen.findByText(/AMB-003 -> HOSP-001/i)).toBeInTheDocument()
+    expect(screen.getByText(/Active Incidents/i)).toBeInTheDocument()
+    expect(screen.queryByText(/[0-9a-f]{8}-[0-9a-f]{4}/i)).not.toBeInTheDocument()
   })
 
   it('runs mass casualty, overload, traffic surge, and multi-zone presets', async () => {

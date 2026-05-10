@@ -22,18 +22,18 @@ export default function Modal({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className="bg-card rounded-2xl shadow-2xl border
-              border-border w-full max-w-lg"
+            className="w-full max-w-lg rounded-xl border
+              border-white/10 bg-[#151c2e] shadow-2xl shadow-black/50"
             onClick={e => e.stopPropagation()}
           >
-            <div className="p-6 border-b border-border">
+            <div className="border-b border-white/10 p-6">
               <h2 className="text-lg font-semibold text-slate-100">
                 {title}
               </h2>
             </div>
             <div className="p-6">{children}</div>
             {footer && (
-              <div className="p-6 border-t border-border flex
+              <div className="flex border-t border-white/10 p-6
                 justify-end gap-3">
                 {footer}
               </div>

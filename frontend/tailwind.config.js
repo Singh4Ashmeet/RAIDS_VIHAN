@@ -20,7 +20,7 @@ export default {
         border:  "#334155",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["DM Sans", "system-ui", "sans-serif"],
       },
     },
   },

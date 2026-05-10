@@ -55,6 +55,15 @@ export default function AdminLayout() {
     ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
     : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
   const displayName = user?.full_name || user?.username || 'Admin'
+  const isScenarioLab = location.pathname === '/admin/scenario' || location.pathname === '/admin/scenarios'
+
+  if (isScenarioLab) {
+    return (
+      <div className="h-screen overflow-hidden bg-[#0a0e1a] text-slate-100">
+        <Outlet/>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen flex-col bg-surface text-slate-100">
