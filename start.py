@@ -13,6 +13,7 @@ Java, and C# modules are detected and verified without blocking the main app.
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import signal
@@ -24,14 +25,9 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-
-try:
-    from dotenv import load_dotenv
-except ModuleNotFoundError:
-    load_dotenv = None
 
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
@@ -45,8 +41,42 @@ CPP_RELEASE_OPTIMIZER = CPP_BUILD_DIR / "Release" / ("raid_optimizer.exe" if os.
 JAVA_DRIVER_CLIENT = JAVA_DRIVER / "src" / "main" / "java" / "in" / "raidnexus" / "driver" / "DriverClient.java"
 CSHARP_PROJECT = CSHARP_SIMULATION / "RaidNexusSimulation.csproj"
 
-if load_dotenv is not None:
-    load_dotenv(BACKEND / ".env")
+
+def load_env_file(env_path: Path) -> None:
+    """Load backend .env values even before optional dependencies are installed."""
+
+    try:
+        dotenv = importlib.import_module("dotenv")
+        load_dotenv = getattr(dotenv, "load_dotenv", None)
+    except ModuleNotFoundError:
+        load_dotenv = None
+
+    if callable(load_dotenv):
+        load_dotenv(env_path)
+        return
+
+    if not env_path.is_file():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key.removeprefix("export ").strip()
+        if not key or key in os.environ:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ[key] = value
+
+
+load_env_file(BACKEND / ".env")
 
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
